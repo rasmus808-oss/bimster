@@ -1,0 +1,2750 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sketcher</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #f4f3f0;
+    --bg2: #eeedea;
+    --bg3: #e6e4e0;
+    --panel: #fafaf8;
+    --border: rgba(0,0,0,0.10);
+    --border2: rgba(0,0,0,0.18);
+    --text: #1a1917;
+    --text2: #6b6965;
+    --text3: #a09d99;
+    --accent: #c8b84a;
+    --accent2: #b8a83a;
+    --blue: #4a7fc8;
+    --font: 'DM Sans', sans-serif;
+    --mono: 'DM Mono', monospace;
+  }
+
+  html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg); font-family: var(--font); color: var(--text); }
+
+  /* ── TOP BAR ── */
+  #topbar {
+    position: fixed; top: 0; left: 0; right: 0; height: 42px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; padding: 0 12px; gap: 10px;
+    z-index: 100;
+  }
+  #topbar .logo {
+    width: 22px; height: 22px; background: var(--text);
+    border-radius: 4px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+  }
+  #topbar .logo svg { width: 12px; height: 12px; }
+  .proj-name {
+    font-size: 13px; font-weight: 400; color: var(--text);
+    background: none; border: none; cursor: pointer; padding: 2px 4px;
+    border-radius: 3px; font-family: var(--font);
+  }
+  .proj-name:hover { background: var(--bg2); }
+  .sep { color: var(--text3); font-size: 13px; }
+
+  .plan-pill {
+    display: flex; align-items: center; gap: 5px;
+    background: var(--bg2); border-radius: 20px;
+    padding: 3px 10px; font-size: 12px; cursor: pointer;
+    border: 1px solid var(--border); position: relative;
+  }
+  .plan-pill select {
+    background: none; border: none; font-size: 12px;
+    font-family: var(--font); color: var(--text); cursor: pointer;
+    outline: none; appearance: none; padding-right: 14px;
+  }
+  .plan-pill::after {
+    content: ''; position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+    width: 0; height: 0; border: 4px solid transparent;
+    border-top: 4px solid var(--text2); margin-top: 2px; pointer-events: none;
+  }
+  .status-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--text3); margin-left: 4px;
+  }
+  .status-dot.active { background: #4caf50; }
+  .spacer { flex: 1; }
+  .top-btn {
+    font-size: 12px; font-family: var(--font);
+    background: none; border: 1px solid var(--border2);
+    border-radius: 5px; padding: 4px 12px; cursor: pointer;
+    color: var(--text); display: flex; align-items: center; gap: 5px;
+  }
+  .top-btn:hover { background: var(--bg2); }
+  .top-btn.render-btn { background: var(--text); color: #fff; border-color: var(--text); }
+  .top-btn.render-btn:hover { background: #333; }
+
+  /* ── MAIN LAYOUT ── */
+  #main {
+    position: fixed; top: 42px; left: 0; right: 0; bottom: 0;
+    display: grid; grid-template-columns: 1fr 1px 1fr;
+  }
+
+  /* ── LEFT: 2D CANVAS ── */
+  #canvas-area {
+    position: relative; overflow: hidden; background: var(--bg);
+    cursor: crosshair;
+  }
+
+  #plan-canvas { display: block; position: absolute; top: 0; left: 0; }
+
+  .plan-label {
+    position: absolute; top: 12px; left: 16px;
+    font-size: 11px; color: var(--text3); pointer-events: none;
+    font-family: var(--mono); letter-spacing: 0.02em;
+  }
+
+  /* shared viewport button style used in both 2D and 3D controls */
+  .vpbtn {
+    background: var(--panel); border: 1px solid var(--border2);
+    border-radius: 3px; height: 20px; padding: 0 6px;
+    font-size: 11px; font-family: var(--mono);
+    display: inline-flex; align-items: center; justify-content: center;
+    cursor: pointer; color: var(--text2); white-space: nowrap;
+    min-width: 20px; line-height: 1;
+  }
+  .vpbtn:hover { background: var(--bg3); color: var(--text); }
+  .vpbtn.active { background: var(--text); color: #fff; border-color: var(--text); }
+
+  .zoom-indicator {
+    position: absolute; bottom: 58px; left: 12px;
+    display: flex; align-items: center; gap: 6px;
+  }
+  #zoom-pct {
+    font-size: 11px; font-family: var(--mono); color: var(--text3);
+    min-width: 34px; text-align: center;
+  }
+
+  /* ── DIVIDER ── */
+  #divider {
+    background: var(--border2); cursor: col-resize;
+    position: relative; z-index: 10;
+  }
+  #divider:hover { background: var(--blue); }
+
+  /* ── RIGHT: 3D VIEWPORT ── */
+  #viewport {
+    position: relative; overflow: hidden; background: #f0ede8;
+  }
+  #three-canvas { display: block; position: absolute; top: 0; left: 0; }
+
+  .vp-label {
+    position: absolute; top: 12px; left: 16px;
+    font-size: 11px; color: var(--text3); pointer-events: none;
+    font-family: var(--mono);
+  }
+  .vp-controls {
+    position: absolute; bottom: 58px; right: 12px;
+    display: flex; align-items: center; gap: 6px; z-index: 30;
+  }
+  .vp-btn { /* alias — same as .vpbtn */ }
+
+  /* ── BOTTOM TOOLBAR ── */
+  #toolbar {
+    position: fixed; bottom: 0; left: 0;
+    width: 50%; /* covers left canvas only */
+    height: 48px;
+    display: flex; align-items: center; justify-content: center;
+    gap: 2px;
+    background: var(--panel); border-top: 1px solid var(--border);
+    z-index: 50;
+  }
+  .tool-btn {
+    width: 34px; height: 34px; border-radius: 6px; border: none;
+    background: none; cursor: pointer; display: flex; align-items: center; justify-content: center;
+    color: var(--text2); transition: background 0.1s, color 0.1s; position: relative;
+  }
+  .tool-btn:hover { background: var(--bg2); color: var(--text); }
+  .tool-btn.active { background: var(--text); color: #fff; }
+  .tool-btn svg { width: 15px; height: 15px; }
+  .tool-sep { width: 1px; height: 20px; background: var(--border2); margin: 0 4px; }
+
+  /* toolbar right (chat, view, render) */
+  #toolbar-right {
+    position: fixed; bottom: 0; right: 0;
+    width: 50%;
+    height: 48px;
+    display: flex; align-items: center; justify-content: flex-end;
+    padding: 0 12px; gap: 8px;
+    background: var(--panel); border-top: 1px solid var(--border);
+    z-index: 50;
+  }
+  .chat-btn {
+    display: flex; align-items: center; gap: 5px;
+    font-size: 12px; font-family: var(--font); color: var(--text2);
+    background: none; border: none; cursor: pointer;
+  }
+  .chat-btn:hover { color: var(--text); }
+
+  /* ── CONTEXT POPUPS ── */
+  .ctx-popup {
+    position: absolute; background: var(--panel);
+    border: 1px solid var(--border2); border-radius: 8px;
+    padding: 6px; box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+    z-index: 200; display: none; flex-direction: column; gap: 3px;
+    font-size: 12px; font-family: var(--font); min-width: 160px;
+  }
+  .ctx-popup.show { display: flex; }
+  .ctx-row {
+    display: flex; align-items: center; gap: 8px;
+    padding: 5px 8px; border-radius: 5px; cursor: pointer;
+    color: var(--text2);
+  }
+  .ctx-row:hover { background: var(--bg2); color: var(--text); }
+  .ctx-sep { height: 1px; background: var(--border); margin: 2px 0; }
+
+  /* ── OBJECT POPUP (on select) ── */
+  .obj-popup {
+    position: absolute; background: var(--panel);
+    border: 1px solid var(--border2); border-radius: 8px;
+    padding: 5px 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    z-index: 200; display: none; align-items: center; gap: 8px;
+    font-size: 12px; font-family: var(--font);
+  }
+  .obj-popup.show { display: flex; }
+  .obj-type-select {
+    background: none; border: 1px solid var(--border2);
+    border-radius: 4px; font-size: 11px; font-family: var(--mono);
+    color: var(--text); padding: 2px 6px; cursor: pointer; outline: none;
+  }
+  .obj-color-swatch {
+    width: 16px; height: 16px; border-radius: 50%;
+    border: 1.5px solid var(--border2); cursor: pointer; flex-shrink: 0;
+  }
+  .obj-del-btn {
+    width: 20px; height: 20px; border-radius: 3px; border: none;
+    background: none; cursor: pointer; color: var(--text3);
+    display: flex; align-items: center; justify-content: center; font-size: 14px;
+  }
+  .obj-del-btn:hover { background: #fee; color: #c00; }
+
+  /* ── MODULE PANEL ── */
+  #module-panel {
+    position: absolute; right: 0; top: 0; bottom: 48px;
+    width: 100px; background: rgba(250,250,248,0.92);
+    border-left: 1px solid var(--border);
+    display: none; flex-direction: column;
+    padding: 10px 8px; gap: 8px; z-index: 30;
+    overflow-y: auto;
+  }
+  #module-panel.show { display: flex; }
+  .mod-label { font-size: 10px; font-family: var(--mono); color: var(--text3); margin-bottom: 2px; }
+  .mod-thumb {
+    width: 100%; aspect-ratio: 1;
+    border: 1px solid var(--border2); border-radius: 5px;
+    background: var(--bg2); cursor: pointer; overflow: hidden;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px; color: var(--text3);
+  }
+  .mod-thumb:hover { border-color: var(--blue); }
+  .mod-thumb canvas { width: 100%; height: 100%; }
+  .mod-add { width: 100%; padding: 5px; background: none; border: 1px dashed var(--border2);
+    border-radius: 5px; font-size: 11px; color: var(--text3); cursor: pointer; font-family: var(--font); }
+  .mod-add:hover { border-color: var(--text2); color: var(--text2); }
+
+  /* ── PLAN DROPDOWN ── */
+  #plan-dropdown {
+    position: absolute; top: 42px; left: 50px;
+    background: var(--panel); border: 1px solid var(--border2);
+    border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+    z-index: 300; display: none; flex-direction: column; min-width: 180px; overflow: hidden;
+  }
+  #plan-dropdown.show { display: flex; }
+  .plan-item {
+    padding: 8px 14px; font-size: 12px; cursor: pointer; color: var(--text2);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .plan-item:hover { background: var(--bg2); color: var(--text); }
+  .plan-item.active { color: var(--text); font-weight: 500; }
+  .plan-item-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text3); }
+  .plan-item.active .plan-item-dot { background: var(--accent); }
+  .plan-add { padding: 8px 14px; font-size: 12px; cursor: pointer; color: var(--text3);
+    border-top: 1px solid var(--border); display: flex; align-items: center; gap: 8px; }
+  .plan-add:hover { background: var(--bg2); color: var(--text2); }
+
+  /* ── MARQUEE ── */
+  #marquee-rect {
+    position: absolute; pointer-events: none;
+    border: 1px solid #4a7fc8;
+    background: rgba(74,127,200,0.07);
+    display: none; z-index: 10;
+  }
+  #marquee-rect.show { display: block; }
+
+  /* ── FURNITURE PICKER ── */
+  #furniture-picker {
+    position: fixed; bottom: 96px; left: 50%; transform: translateX(-50%);
+    background: var(--panel); border: 1px solid var(--border2);
+    border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+    z-index: 300; display: none; flex-direction: column;
+    padding: 10px; gap: 8px; width: 300px;
+  }
+  #furniture-picker.show { display: flex; }
+  .furn-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
+  .furn-item {
+    aspect-ratio: 1; border-radius: 6px; border: 1.5px solid transparent;
+    background: var(--bg2); display: flex; align-items: center; justify-content: center;
+    cursor: pointer; font-size: 18px; transition: border-color 0.1s, background 0.1s;
+  }
+  .furn-item:hover { background: var(--bg3); border-color: var(--border2); }
+  .furn-item.active { border-color: var(--blue); background: rgba(74,127,200,0.08); }
+  .furn-cats { display: flex; gap: 6px; flex-wrap: wrap; }
+  .furn-cat-btn {
+    font-size: 11px; font-family: var(--font); padding: 3px 9px;
+    border-radius: 20px; border: 1px solid var(--border2);
+    background: none; cursor: pointer; color: var(--text2);
+  }
+  .furn-cat-btn:hover { background: var(--bg2); }
+  .furn-cat-btn.active { background: var(--text); color: #fff; border-color: var(--text); }
+
+  /* ── DIMENSION LABELS ── */
+  .dim-label {
+    position: absolute; pointer-events: none; z-index: 15;
+    font-size: 10px; font-family: var(--mono); color: #4a7fc8;
+    background: rgba(255,255,255,0.9); padding: 1px 4px;
+    border-radius: 3px; border: 1px solid rgba(74,127,200,0.3);
+    transform: translate(-50%, -50%);
+    white-space: nowrap;
+  }
+
+  /* ── CONTEXT TOOLBAR ── */
+  #ctx-toolbar {
+    position: fixed; bottom: 48px; left: 50%; transform: translateX(-50%);
+    background: var(--panel); border: 1px solid var(--border2);
+    border-radius: 10px; box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+    z-index: 201; display: none; align-items: center;
+    padding: 6px 14px; gap: 6px;
+    font-size: 12px; font-family: var(--font);
+    white-space: nowrap;
+  }
+  #ctx-toolbar.show { display: flex; }
+  .ctx-type-btn {
+    display: flex; align-items: center; gap: 4px;
+    background: none; border: none; font-size: 13px; font-family: var(--font);
+    font-weight: 500; color: var(--text); cursor: pointer; padding: 3px 6px;
+    border-radius: 5px; min-width: 52px;
+  }
+  .ctx-type-btn:hover { background: var(--bg2); }
+  .ctx-type-btn svg { width: 10px; height: 10px; opacity: 0.4; }
+  #ctx-type-dropdown {
+    position: absolute; bottom: calc(100% + 6px); left: 0;
+    background: var(--panel); border: 1px solid var(--border2);
+    border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.14);
+    display: none; flex-direction: column; overflow: hidden;
+    min-width: 130px; z-index: 400;
+  }
+  #ctx-type-dropdown.open { display: flex; }
+  .ctx-type-option {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 12px; font-size: 12px; font-family: var(--font);
+    color: var(--text2); cursor: pointer; border: none; background: none;
+    text-align: left; width: 100%;
+  }
+  .ctx-type-option:hover { background: var(--bg2); color: var(--text); }
+  .ctx-type-option.active { color: var(--text); font-weight: 500; }
+  .ctx-type-option svg { width: 14px; height: 14px; flex-shrink: 0; opacity: 0.5; }
+  .ctx-type-option.active svg { opacity: 1; }
+  .ctx-divider { width: 1px; height: 20px; background: var(--border); margin: 0 4px; }
+  .ctx-group { display: flex; align-items: center; gap: 6px; }
+  .ctx-field { display: flex; flex-direction: column; align-items: center; gap: 1px; }
+  .ctx-lbl { font-size: 9px; color: var(--text3); letter-spacing: 0.04em; text-transform: uppercase; line-height: 1; }
+  .ctx-num {
+    width: 52px; border: 1px solid var(--border2); border-radius: 5px;
+    padding: 4px 6px; font-size: 13px; font-family: var(--mono);
+    background: var(--bg); color: var(--text); outline: none; text-align: center;
+    -moz-appearance: textfield;
+  }
+  .ctx-num::-webkit-inner-spin-button, .ctx-num::-webkit-outer-spin-button { -webkit-appearance: none; }
+  .ctx-num:focus { border-color: var(--blue); background: #fff; }
+  .ctx-unit { font-size: 10px; color: var(--text3); margin-left: 1px; }
+  .ctx-readout {
+    font-size: 13px; font-family: var(--mono); color: var(--text2);
+    background: var(--bg2); border-radius: 5px; padding: 4px 8px;
+    border: 1px solid var(--border);
+  }
+  .ctx-color-dot {
+    width: 18px; height: 18px; border-radius: 50%;
+    border: 2px solid var(--border2); cursor: pointer; flex-shrink: 0;
+    transition: transform 0.1s;
+  }
+  .ctx-color-dot:hover { transform: scale(1.15); }
+  #ctx-color-dropdown {
+    position: absolute; bottom: calc(100% + 6px); right: 0;
+    background: var(--panel); border: 1px solid var(--border2);
+    border-radius: 10px; box-shadow: 0 4px 16px rgba(0,0,0,0.14);
+    display: none; flex-direction: column; overflow: hidden;
+    min-width: 160px; z-index: 400; padding: 6px;
+  }
+  #ctx-color-dropdown.open { display: flex; }
+  .ctx-color-option {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 8px; font-size: 12px; font-family: var(--font);
+    color: var(--text2); cursor: pointer; border: none; background: none;
+    text-align: left; width: 100%; border-radius: 6px;
+  }
+  .ctx-color-option:hover { background: var(--bg2); color: var(--text); }
+  .ctx-color-option.active { color: var(--text); font-weight: 500; }
+  .ctx-color-swatch-sm {
+    width: 16px; height: 16px; border-radius: 50%;
+    border: 1.5px solid rgba(0,0,0,0.12); flex-shrink: 0;
+  }
+  .ctx-del {
+    width: 24px; height: 24px; border-radius: 5px; border: none;
+    background: none; cursor: pointer; color: var(--text3);
+    font-size: 15px; display: flex; align-items: center; justify-content: center;
+    margin-left: 2px;
+  }
+  .ctx-del:hover { background: #fee; color: #c00; }
+
+  /* ── RESIZE HANDLES ── */
+  .rhandle {
+    position: absolute; width: 8px; height: 8px;
+    background: #fff; border: 1.5px solid #4a7fc8;
+    border-radius: 1px; pointer-events: all; z-index: 20;
+    margin-left: -4px; margin-top: -4px;
+  }
+
+  /* ── MULTI-SELECT POPUP ── */
+  #multi-popup {
+    position: absolute; background: var(--panel);
+    border: 1px solid var(--border2); border-radius: 8px;
+    padding: 5px 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    z-index: 200; display: none; align-items: center; gap: 10px;
+    font-size: 12px; font-family: var(--font); color: var(--text2);
+  }
+  #multi-popup.show { display: flex; }
+  #multi-popup button {
+    background: #fee; border: 1px solid #fcc; border-radius: 4px;
+    padding: 3px 10px; font-size: 11px; cursor: pointer; color: #c00;
+    font-family: var(--font);
+  }
+  #multi-popup button:hover { background: #fdd; }
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div id="topbar">
+  <div class="logo">
+    <svg viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="1" y="1" width="4" height="6" fill="white" opacity="0.9"/>
+      <rect x="6" y="3" width="5" height="8" fill="white" opacity="0.6"/>
+    </svg>
+  </div>
+  <button class="proj-name" id="proj-name-btn">Sketcher</button>
+  <span class="sep">›</span>
+  <div class="plan-pill" id="plan-pill-btn">
+    <select id="plan-select">
+      <option value="0">Plan 01</option>
+      <option value="1">Plan 02</option>
+    </select>
+  </div>
+  <div class="status-dot active" id="status-dot"></div>
+  <div class="spacer"></div>
+</div>
+
+<!-- PLAN DROPDOWN -->
+<div id="plan-dropdown">
+  <div class="plan-item active" onclick="switchPlan(0)"><div class="plan-item-dot"></div>Plan 01 — Ground Floor</div>
+  <div class="plan-item" onclick="switchPlan(1)"><div class="plan-item-dot"></div>Plan 02 — 1st Floor (1–3)</div>
+  <div class="plan-add" onclick="addPlan()">+ Add plan</div>
+</div>
+
+<!-- MAIN AREA -->
+<div id="main">
+  <div id="canvas-area">
+    <canvas id="plan-canvas"></canvas>
+    <!-- plan label drawn on canvas -->
+    <div id="marquee-rect"></div>
+    <div id="handles-overlay" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:20"></div>
+
+    <!-- 2D zoom controls — bottom-left of 2D pane, above toolbar -->
+    <div class="zoom-indicator">
+      <button class="vpbtn" onclick="zoom2D(-0.3)">−</button>
+      <span id="zoom-pct">100%</span>
+      <button class="vpbtn" onclick="zoom2D(0.3)">+</button>
+      <button class="vpbtn" onclick="fit2D()">⊡ Fit</button>
+      <button class="vpbtn" onclick="zoomSelected2D()">⊡ Sel</button>
+    </div>
+
+  </div>
+  <div id="divider"></div>
+  <div id="viewport">
+    <canvas id="three-canvas"></canvas>
+    <div class="vp-label">3D View</div>
+
+    <!-- 3D controls — bottom-right of 3D pane -->
+    <div class="vp-controls">
+      <button class="vpbtn" onclick="zoomExtents()">⊡ Fit</button>
+      <button class="vpbtn active" id="vbtn-persp" onclick="setVPMode('persp')">Persp</button>
+      <button class="vpbtn" id="vbtn-ortho" onclick="setVPMode('ortho')">Ortho</button>
+    </div>
+
+    <div id="module-panel">
+      <div class="mod-label">Modules</div>
+    </div>
+  </div>
+</div>
+
+<!-- BOTTOM TOOLBAR (left) -->
+<!-- FURNITURE PICKER -->
+<div id="furniture-picker">
+  <div class="furn-cats">
+    <button class="furn-cat-btn active" onclick="setFurnCat('seating')">Seating</button>
+    <button class="furn-cat-btn" onclick="setFurnCat('tables')">Tables</button>
+    <button class="furn-cat-btn" onclick="setFurnCat('beds')">Beds</button>
+    <button class="furn-cat-btn" onclick="setFurnCat('plants')">Plants</button>
+  </div>
+  <div class="furn-grid" id="furn-grid"></div>
+</div>
+
+<div id="toolbar">
+  <!-- Select -->
+  <button class="tool-btn" id="t-select" onclick="setTool('select')" title="Select (V)">
+    <svg viewBox="0 0 15 15" fill="none"><path d="M2 2l4.5 11 2-4.5L13 6.5z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round" fill="none"/></svg>
+  </button>
+  <!-- Marquee -->
+  <button class="tool-btn" id="t-marquee" onclick="setTool('marquee')" title="Marquee select (M)">
+    <svg viewBox="0 0 15 15" fill="none"><rect x="2" y="2" width="11" height="11" stroke="currentColor" stroke-width="1.2" stroke-dasharray="2.5 1.5" rx="0.5"/><path d="M6 9l1.5 2L11 6" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </button>
+  <!-- Grid -->
+  <button class="tool-btn" id="t-grid" onclick="setTool('grid')" title="Grid (G)">
+    <svg viewBox="0 0 15 15" fill="none"><rect x="2" y="2" width="4" height="4" stroke="currentColor" stroke-width="1.1"/><rect x="8" y="2" width="4" height="4" stroke="currentColor" stroke-width="1.1"/><rect x="2" y="8" width="4" height="4" stroke="currentColor" stroke-width="1.1"/><rect x="8" y="8" width="4" height="4" stroke="currentColor" stroke-width="1.1"/></svg>
+  </button>
+  <!-- Rectangle -->
+  <button class="tool-btn active" id="t-rect" onclick="setTool('rect')" title="Rectangle (R)">
+    <svg viewBox="0 0 15 15" fill="none"><rect x="2" y="4" width="11" height="8" stroke="currentColor" stroke-width="1.2" rx="0.5"/></svg>
+  </button>
+  <div class="tool-sep"></div>
+  <!-- Line -->
+  <button class="tool-btn" id="t-line" onclick="setTool('line')" title="Line (L)">
+    <svg viewBox="0 0 15 15" fill="none"><line x1="2" y1="13" x2="13" y2="2" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+  </button>
+  <!-- Triangle -->
+  <button class="tool-btn" id="t-tri" onclick="setTool('tri')" title="Triangle">
+    <svg viewBox="0 0 15 15" fill="none"><path d="M7.5 2l6 11H1.5z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>
+  </button>
+  <!-- Circle -->
+  <button class="tool-btn" id="t-circle" onclick="setTool('circle')" title="Circle (C)">
+    <svg viewBox="0 0 15 15" fill="none"><circle cx="7.5" cy="7.5" r="5" stroke="currentColor" stroke-width="1.2"/></svg>
+  </button>
+  <!-- Curve/Arc -->
+  <button class="tool-btn" id="t-curve" onclick="setTool('curve')" title="Curve">
+    <svg viewBox="0 0 15 15" fill="none"><path d="M2 12 C4 4, 11 4, 13 12" stroke="currentColor" stroke-width="1.2" fill="none" stroke-linecap="round"/></svg>
+  </button>
+  <div class="tool-sep"></div>
+  <!-- Furniture stamp -->
+  <button class="tool-btn" id="t-stamp" onclick="openFurniturePicker()" title="Furniture (F)">
+    <svg viewBox="0 0 15 15" fill="none"><rect x="2" y="8" width="11" height="5" stroke="currentColor" stroke-width="1.1" rx="1"/><path d="M4 8V6a1 1 0 0 1 1-1h5a1 1 0 0 1 1 1v2" stroke="currentColor" stroke-width="1.1"/></svg>
+  </button>
+  <!-- Text -->
+  <button class="tool-btn" id="t-text" onclick="setTool('text')" title="Text (T)">
+    <svg viewBox="0 0 15 15" fill="none"><path d="M2 3h11M7.5 3v9M5 12h5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+  </button>
+  <!-- Pen/freehand -->
+  <button class="tool-btn" id="t-pen" onclick="setTool('pen')" title="Pen (P)">
+    <svg viewBox="0 0 15 15" fill="none"><path d="M2 13l2-2 8-8 2 2-8 8z" stroke="currentColor" stroke-width="1.1" stroke-linejoin="round"/><path d="M2 13l1-3" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>
+  </button>
+
+</div>
+
+<!-- BOTTOM TOOLBAR (right) -->
+<div id="toolbar-right">
+  <!-- 3D viewport controls, same height as left toolbar -->
+  <div style="display:flex;align-items:center;gap:4px;margin-right:8px">
+    <button class="tbtn" onclick="zoomExtents()" title="Fit 3D">
+      <svg viewBox="0 0 15 15" fill="none"><rect x="2" y="2" width="4" height="4" stroke="currentColor" stroke-width="1.2"/><rect x="9" y="2" width="4" height="4" stroke="currentColor" stroke-width="1.2"/><rect x="2" y="9" width="4" height="4" stroke="currentColor" stroke-width="1.2"/><rect x="9" y="9" width="4" height="4" stroke="currentColor" stroke-width="1.2"/></svg>
+    </button>
+    <div class="tsep"></div>
+    <button class="tbtn" id="vbtn-persp" onclick="setVPMode('persp')" title="Perspective">
+      <svg viewBox="0 0 15 15" fill="none"><path d="M2 13L4 2h7l2 11H2z" stroke="currentColor" stroke-width="1.1"/><path d="M1 13h13" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>
+    </button>
+    <button class="tbtn" id="vbtn-ortho" onclick="setVPMode('ortho')" title="Orthographic">
+      <svg viewBox="0 0 15 15" fill="none"><rect x="2" y="2" width="11" height="11" stroke="currentColor" stroke-width="1.1"/><path d="M2 2l3 3M13 2l-3 3M2 13l3-3M13 13l-3-3" stroke="currentColor" stroke-width="1" stroke-linecap="round"/></svg>
+    </button>
+  </div>
+  <button class="chat-btn" onclick="openChat()">
+    <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M1 1h11v8H7.5L5 12V9H1z" stroke="currentColor" stroke-width="1.1" stroke-linejoin="round" fill="none"/></svg>
+    Chat
+  </button>
+  <button class="top-btn" onclick="cycleViewMode()">View ▾</button>
+  <button class="top-btn render-btn" onclick="triggerRender()">Render ▾</button>
+</div>
+
+<!-- MULTI-SELECT POPUP -->
+<div id="multi-popup">
+  <span id="multi-count">0 objects</span>
+  <button onclick="deleteMultiSelected()">Delete all</button>
+</div>
+
+<!-- OBJECT POPUP -->
+<!-- CONTEXT TOOLBAR — fully contextual per object type -->
+<div id="ctx-toolbar">
+
+  <!-- Type selector with dropdown -->
+  <div style="position:relative">
+    <button class="ctx-type-btn" onclick="toggleTypeDropdown(event)">
+      <span id="ctx-type-label">Mass</span>
+      <svg viewBox="0 0 10 10" fill="none"><path d="M2 3.5l3 3 3-3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+    </button>
+    <div id="ctx-type-dropdown">
+      <button class="ctx-type-option" data-type="mass" onclick="setObjType('mass')">
+        <svg viewBox="0 0 14 14" fill="none"><rect x="1" y="3" width="12" height="9" rx="0.5" stroke="currentColor" stroke-width="1.2"/></svg>
+        Mass
+      </button>
+      <button class="ctx-type-option" data-type="grid" onclick="setObjType('grid')">
+        <svg viewBox="0 0 14 14" fill="none"><rect x="1" y="1" width="5" height="5" stroke="currentColor" stroke-width="1.1"/><rect x="8" y="1" width="5" height="5" stroke="currentColor" stroke-width="1.1"/><rect x="1" y="8" width="5" height="5" stroke="currentColor" stroke-width="1.1"/><rect x="8" y="8" width="5" height="5" stroke="currentColor" stroke-width="1.1"/></svg>
+        Grid
+      </button>
+      <button class="ctx-type-option" data-type="slab" onclick="setObjType('slab')">
+        <svg viewBox="0 0 14 14" fill="none"><rect x="1" y="5" width="12" height="4" rx="0.5" stroke="currentColor" stroke-width="1.2"/></svg>
+        Slab
+      </button>
+      <button class="ctx-type-option" data-type="wall" onclick="setObjType('wall')">
+        <svg viewBox="0 0 14 14" fill="none"><rect x="1" y="4" width="12" height="6" rx="0.5" stroke="currentColor" stroke-width="1.2"/><line x1="5" y1="4" x2="5" y2="10" stroke="currentColor" stroke-width="1"/><line x1="9" y1="4" x2="9" y2="10" stroke="currentColor" stroke-width="1"/></svg>
+        Wall
+      </button>
+      <button class="ctx-type-option" data-type="stair" onclick="setObjType('stair')">
+        <svg viewBox="0 0 14 14" fill="none"><path d="M2 12h3V9h3V6h3V2" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Stair
+      </button>
+    </div>
+  </div>
+
+  <div class="ctx-divider"></div>
+
+  <!-- MASS fields: W × D -->
+  <div class="ctx-group" id="grp-mass">
+    <div class="ctx-field">
+      <span class="ctx-lbl">Width</span>
+      <div style="display:flex;align-items:center;gap:3px">
+        <input class="ctx-num" id="prop-w" type="number" step="any" min="0.5" oninput="applyPropLive('w',this)">
+        <span class="ctx-unit">m</span>
+      </div>
+    </div>
+    <div class="ctx-field">
+      <span class="ctx-lbl">Depth</span>
+      <div style="display:flex;align-items:center;gap:3px">
+        <input class="ctx-num" id="prop-h" type="number" step="any" min="0.5" oninput="applyPropLive('h',this)">
+        <span class="ctx-unit">m</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- GRID-only fields: Bay W × Bay D + col count readout -->
+  <div class="ctx-group" id="grp-grid" style="display:none">
+    <div class="ctx-field">
+      <span class="ctx-lbl">Cols</span>
+      <input class="ctx-num" id="prop-cols" type="number" step="1" min="1" max="50" oninput="applyGridCount('cols',this)" style="width:48px">
+    </div>
+    <div class="ctx-field">
+      <span class="ctx-lbl">Rows</span>
+      <input class="ctx-num" id="prop-rows" type="number" step="1" min="1" max="50" oninput="applyGridCount('rows',this)" style="width:48px">
+    </div>
+    <div class="ctx-divider" style="height:20px"></div>
+    <div class="ctx-field">
+      <span class="ctx-lbl">Bay W</span>
+      <div style="display:flex;align-items:center;gap:3px">
+        <input class="ctx-num" id="prop-bay-w" type="number" step="any" min="0.5" oninput="applyGridBay('w',this)">
+        <span class="ctx-unit">m</span>
+      </div>
+    </div>
+    <div class="ctx-field">
+      <span class="ctx-lbl">Bay D</span>
+      <div style="display:flex;align-items:center;gap:3px">
+        <input class="ctx-num" id="prop-bay-d" type="number" step="any" min="0.5" oninput="applyGridBay('d',this)">
+        <span class="ctx-unit">m</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- FLOORS + FLR H — shown for mass, grid, stair, slab -->
+  <div class="ctx-divider" id="div-floors"></div>
+  <div class="ctx-group" id="grp-floors">
+    <div class="ctx-field">
+      <span class="ctx-lbl">Floors</span>
+      <input class="ctx-num" id="prop-stories" type="number" step="1" min="1" max="99" oninput="applyPropLive('floors',this)" style="width:46px">
+    </div>
+    <div class="ctx-field">
+      <span class="ctx-lbl">Flr H</span>
+      <div style="display:flex;align-items:center;gap:3px">
+        <input class="ctx-num" id="prop-flrh" type="number" step="0.1" min="2.0" max="6.0" oninput="applyPropLive('floorH',this)">
+        <span class="ctx-unit">m</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="ctx-divider" id="div-color"></div>
+  <div style="position:relative" id="wrap-color">
+    <div class="ctx-field" style="align-items:center">
+      <span class="ctx-lbl">Color</span>
+      <div class="ctx-color-dot" id="ctx-color-dot" onclick="toggleColorDropdown(event)" title="Change colour" style="margin-top:2px"></div>
+    </div>
+    <div id="ctx-color-dropdown"></div>
+  </div>
+  <button class="ctx-del" onclick="deleteSel()" title="Delete">✕</button>
+</div>
+
+<div class="obj-popup" id="obj-popup">
+  <select class="obj-type-select" id="obj-type" onchange="changeObjType()">
+    <option>Mass</option>
+    <option>Grid</option>
+    <option>Stair</option>
+    <option>Wall</option>
+    <option>Slab</option>
+    <option>Column</option>
+  </select>
+  <div style="width:1px;height:16px;background:var(--border2)"></div>
+  <div class="obj-color-swatch" id="obj-swatch" onclick="cycleColor()" title="Change color"></div>
+  <button class="obj-del-btn" onclick="deleteSelected()" title="Delete">✕</button>
+</div>
+
+<!-- CONTEXT MENU -->
+<div class="ctx-popup" id="ctx-menu">
+  <div class="ctx-row" onclick="ctxAddGrid()">
+    <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><rect x="1" y="1" width="4" height="4" stroke="currentColor" stroke-width="1"/><rect x="7" y="1" width="4" height="4" stroke="currentColor" stroke-width="1"/><rect x="1" y="7" width="4" height="4" stroke="currentColor" stroke-width="1"/><rect x="7" y="7" width="4" height="4" stroke="currentColor" stroke-width="1"/></svg>
+    Add Grid
+  </div>
+  <div class="ctx-row" onclick="ctxAddMass()">
+    <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><rect x="1" y="3" width="11" height="8" stroke="currentColor" stroke-width="1" rx="0.5"/></svg>
+    Add Mass
+  </div>
+  <div class="ctx-sep"></div>
+  <div class="ctx-row" onclick="ctxDuplicate()">
+    <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><rect x="4" y="1" width="8" height="8" stroke="currentColor" stroke-width="1" rx="0.5"/><rect x="1" y="4" width="8" height="8" stroke="currentColor" stroke-width="1" rx="0.5"/></svg>
+    Duplicate
+  </div>
+  <div class="ctx-row" onclick="deleteSelected()">
+    <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M2 3h9M5 3V1.5h3V3M4 3v7.5h5V3" stroke="currentColor" stroke-width="1" stroke-linecap="round"/></svg>
+    Delete
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// ═══════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════
+const GRID_SZ = 24; // px per structural grid cell at zoom=1
+const COLORS = ['#e8e5dc','#c8b84a','#d4836a','#7aabcd','#8fc47a','#c47ab0','#cd9a6a','#6a8bcd'];
+const OBJ_TYPES = { mass:'Mass', grid:'Grid', stair:'Stair', wall:'Wall', slab:'Slab', column:'Column' };
+
+let state = {
+  panning: false, panStartX: 0, panStartY: 0, panOriginX: 0, panOriginY: 0,
+  plans: [
+    { name: 'Plan 01', subtitle: 'Ground Floor', objects: [], gridBG: true },
+    { name: 'Plan 02', subtitle: '1st Floor (1–3)', objects: [], gridBG: false }
+  ],
+  currentPlan: 0,
+  tool: 'rect',
+  zoom: 1,
+  panX: 60, panY: 60,
+  selected: null,
+  dragging: false,
+  dragStartX: 0, dragStartY: 0,
+  drawing: false,
+  drawStart: null,
+  objIdCounter: 0,
+  viewMode: 'persp',
+  modules: [],
+  renderMode: false
+};
+let multiSelected = [];
+
+function plan() { return state.plans[state.currentPlan]; }
+function objects() { return plan().objects; }
+
+// ── HISTORY (undo/redo) ──
+const MAX_HISTORY = 50;
+let history = [];      // array of snapshots
+let historyIdx = -1;   // pointer into history
+
+function historySnapshot() {
+  // Deep clone all plans objects
+  const snap = state.plans.map(p => JSON.parse(JSON.stringify(p.objects)));
+  // Truncate redo branch
+  history = history.slice(0, historyIdx + 1);
+  history.push(snap);
+  if (history.length > MAX_HISTORY) history.shift();
+  else historyIdx++;
+}
+
+function historyUndo() {
+  if (historyIdx <= 0) return;
+  historyIdx--;
+  applySnapshot(history[historyIdx]);
+}
+
+function historyRedo() {
+  if (historyIdx >= history.length - 1) return;
+  historyIdx++;
+  applySnapshot(history[historyIdx]);
+}
+
+function applySnapshot(snap) {
+  snap.forEach((objs, i) => {
+    if (state.plans[i]) state.plans[i].objects = JSON.parse(JSON.stringify(objs));
+  });
+  state.selected = null;
+  multiSelected = [];
+  hidePopups();
+  draw2D();
+  rebuild3D();
+}
+function nextId() { return ++state.objIdCounter; }
+
+// ═══════════════════════════════════════════════════════
+// 2D CANVAS SETUP
+// ═══════════════════════════════════════════════════════
+const planCanvas = document.getElementById('plan-canvas');
+const ctx2 = planCanvas.getContext('2d');
+const canvasArea = document.getElementById('canvas-area');
+
+function resizeCanvases() {
+  planCanvas.width = canvasArea.clientWidth;
+  planCanvas.height = canvasArea.clientHeight;
+  // If panY is 0 (init), set a sensible default to show Plan 01
+  if (state.panX === 0 && state.panY === 0) {
+    state.panX = 40; state.panY = 40;
+  }
+  threeRenderer.setSize(vpEl.clientWidth, vpEl.clientHeight);
+  threeCamera.aspect = vpEl.clientWidth / vpEl.clientHeight;
+  threeCamera.updateProjectionMatrix();
+  draw2D(); render3D();
+}
+
+// ═══════════════════════════════════════════════════════
+// COORDINATE HELPERS
+// ═══════════════════════════════════════════════════════
+function worldToScreen(wx, wy) {
+  return { x: wx * state.zoom + state.panX, y: wy * state.zoom + state.panY };
+}
+function screenToWorld(sx, sy) {
+  return { x: (sx - state.panX) / state.zoom, y: (sy - state.panY) / state.zoom };
+}
+function snapToGrid(v) {
+  return Math.round(v / GRID_SZ) * GRID_SZ;
+}
+
+// ═══════════════════════════════════════════════════════
+// 2D DRAW
+// ═══════════════════════════════════════════════════════
+let PLAN_W = 3600, PLAN_H = 2400; const PLAN_GAP = 200; // world units (75m × 50m at 48px/m)
+
+function planOriginY(planIdx) {
+  return planIdx * (PLAN_H + PLAN_GAP);
+}
+
+function draw2D() {
+  const W = planCanvas.width, H = planCanvas.height;
+  ctx2.clearRect(0, 0, W, H);
+  ctx2.fillStyle = '#f0efe9';
+  ctx2.fillRect(0, 0, W, H);
+
+  drawGrid2D();
+
+  // Draw all plans stacked vertically (Vorform-style multi-plan view)
+  state.plans.forEach((p, idx) => {
+    const oy = planOriginY(idx);
+    const bs = worldToScreen(0, oy);
+    const pw = PLAN_W * state.zoom, ph = PLAN_H * state.zoom;
+
+    // Sheet background
+    ctx2.fillStyle = '#fafaf8';
+    ctx2.fillRect(bs.x, bs.y, pw, ph);
+    ctx2.strokeStyle = 'rgba(0,0,0,0.07)';
+    ctx2.lineWidth = 1;
+    ctx2.strokeRect(bs.x, bs.y, pw, ph);
+
+    // Plan sheet label above — shows floor name, dimmer if not active
+    const isActive = idx === state.currentPlan;
+    ctx2.font = `${Math.max(9, 11 * state.zoom)}px DM Sans, sans-serif`;
+    ctx2.fillStyle = isActive ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.18)';
+    ctx2.textAlign = 'left';
+    ctx2.fillText(p.name + ': ' + p.subtitle, bs.x + 2, bs.y - 7);
+    // Show floor elevation hint
+    if (idx > 0 && state.zoom > 0.4) {
+      const elev = (() => {
+        let e = 0;
+        for (let i = 0; i < idx; i++) {
+          const rep = state.plans[i].objects.find(o => o.type === 'mass' || o.type === 'grid');
+          e += (rep ? (rep.floors || 4) : 4) * (rep ? (rep.floorH || 3.2) : 3.2);
+        }
+        return e.toFixed(1);
+      })();
+      ctx2.fillStyle = isActive ? 'rgba(74,127,200,0.7)' : 'rgba(74,127,200,0.3)';
+      ctx2.fillText('+' + elev + 'm', bs.x + pw - 50 * state.zoom, bs.y - 7);
+    }
+
+    // Always show plan below as ghost reference (like Vorform tracing paper)
+    if (idx > 0) {
+      ctx2.save();
+      ctx2.globalAlpha = 0.28;
+      state.plans[idx - 1].objects.forEach(obj => drawObject2D(obj, idx));
+      ctx2.restore();
+    }
+
+    // Objects on this plan
+    p.objects.forEach(obj => drawObject2D(obj, idx));
+
+    // Canvas resize handles (only on active plan)
+    if (idx === state.currentPlan) {
+      const hw = 8, hh = 8;
+      const handles = [
+        { x: bs.x + pw,      y: bs.y + ph/2, cur:'ew-resize',   dir:'w' },
+        { x: bs.x + pw/2,    y: bs.y + ph,   cur:'ns-resize',   dir:'h' },
+        { x: bs.x + pw,      y: bs.y + ph,   cur:'nwse-resize', dir:'wh' },
+      ];
+      handles.forEach(h => {
+        ctx2.fillStyle = '#fff';
+        ctx2.strokeStyle = 'rgba(74,127,200,0.6)';
+        ctx2.lineWidth = 1.5;
+        ctx2.beginPath();
+        ctx2.arc(h.x, h.y, 5, 0, Math.PI*2);
+        ctx2.fill(); ctx2.stroke();
+      });
+    }
+  });
+
+  // Highlight current plan with subtle border
+  const cy = planOriginY(state.currentPlan);
+  const cb = worldToScreen(0, cy);
+  ctx2.strokeStyle = 'rgba(74,127,200,0.25)';
+  ctx2.lineWidth = 2;
+  ctx2.strokeRect(cb.x - 1, cb.y - 1, PLAN_W * state.zoom + 2, PLAN_H * state.zoom + 2);
+
+  // Active drawing preview
+  if (state.drawing && state.drawStart && state.drawCurrent) {
+    drawPreview();
+  }
+
+  // Snap cursor dot
+  if (state.snapDot) {
+    const {sx, sy} = state.snapDot;
+    ctx2.save();
+    ctx2.fillStyle = '#4a7fc8';
+    ctx2.globalAlpha = 0.7;
+    ctx2.beginPath(); ctx2.arc(sx, sy, 4, 0, Math.PI*2); ctx2.fill();
+    ctx2.globalAlpha = 1;
+    ctx2.strokeStyle = '#fff';
+    ctx2.lineWidth = 1.5;
+    ctx2.beginPath(); ctx2.arc(sx, sy, 4, 0, Math.PI*2); ctx2.stroke();
+    ctx2.restore();
+  }
+}
+
+function drawGrid2D() {
+  const sz = GRID_SZ * state.zoom;
+  if (sz < 6) return;
+  ctx2.save();
+  ctx2.strokeStyle = 'rgba(0,0,0,0.06)';
+  ctx2.lineWidth = 0.5;
+  const startX = ((state.panX % sz) + sz) % sz;
+  const startY = ((state.panY % sz) + sz) % sz;
+  for (let x = startX; x < planCanvas.width; x += sz) {
+    ctx2.beginPath(); ctx2.moveTo(x, 0); ctx2.lineTo(x, planCanvas.height); ctx2.stroke();
+  }
+  for (let y = startY; y < planCanvas.height; y += sz) {
+    ctx2.beginPath(); ctx2.moveTo(0, y); ctx2.lineTo(planCanvas.width, y); ctx2.stroke();
+  }
+  ctx2.restore();
+}
+
+function drawObject2D(obj, planIdx) {
+  // Only show selection state for objects on current plan
+  const onCurrentPlan = (planIdx === state.currentPlan);
+  const sel = onCurrentPlan && state.selected === obj.id;
+  const multiSel = onCurrentPlan && multiSelected.includes(obj.id);
+  // y-offset for this plan's sheet
+  const yOff = planOriginY(planIdx || 0);
+
+  ctx2.save();
+  if (obj.type === 'grid') {
+    drawGrid(obj, sel, multiSel, yOff);
+  } else if (obj.type === 'mass' || obj.type === 'wall' || obj.type === 'slab') {
+    drawRect(obj, sel, multiSel, yOff);
+  } else if (obj.type === 'stair') {
+    drawStair(obj, sel, yOff);
+  } else if (obj.type === 'circle') {
+    drawCircle2D(obj, sel, yOff);
+  } else if (obj.type === 'tri') {
+    drawTri(obj, sel, yOff);
+  } else if (obj.type === 'line') {
+    drawLine2D(obj, sel, yOff);
+  } else if (obj.type === 'curve') {
+    drawCurve2D(obj, sel, yOff);
+  } else if (obj.type === 'label') {
+    drawLabel2D(obj, sel, yOff);
+  } else if (obj.type === 'furniture') {
+    drawFurniture(obj, sel, yOff);
+  }
+  ctx2.restore();
+}
+
+// Helper: world-to-screen with y-offset for plan stacking
+function wts(wx, wy, yOff) {
+  return { x: wx * state.zoom + state.panX, y: (wy + yOff) * state.zoom + state.panY };
+}
+
+function drawRect(obj, sel, multiSel, yOff=0) {
+  const s = wts(obj.x, obj.y, yOff);
+  const sw = obj.w * state.zoom, sh = obj.h * state.zoom;
+  ctx2.globalAlpha = multiSel ? 0.45 : sel ? 0.82 : 0.72;
+  ctx2.fillStyle = obj.color || '#e0ddd5';
+  ctx2.fillRect(s.x, s.y, sw, sh);
+  ctx2.globalAlpha = 1;
+  ctx2.strokeStyle = multiSel ? '#e07820' : sel ? '#2a6dd4' : 'rgba(0,0,0,0.18)';
+  ctx2.lineWidth = sel ? 1.5 : 0.75;
+  ctx2.strokeRect(s.x, s.y, sw, sh);
+  const fl = obj.floors || 4, fh = obj.floorH || 3.2;
+  const labelTxt = fl + 'fl  ' + (fl*fh).toFixed(0) + 'm';
+  ctx2.font = Math.max(8, 10*state.zoom) + 'px DM Mono,monospace';
+  ctx2.fillStyle = sel ? '#2a6dd4' : 'rgba(0,0,0,0.28)';
+  ctx2.textAlign = 'left'; ctx2.textBaseline = 'top';
+  ctx2.fillText(labelTxt, s.x+4, s.y+4);
+  if (sel) drawHandles(s.x, s.y, sw, sh);
+}
+
+
+function drawGrid(obj, sel, multiSel=false, yOff=0) {
+  const s = wts(obj.x, obj.y, yOff);
+  const sw = obj.w * state.zoom, sh = obj.h * state.zoom;
+  const cols = Math.round(obj.cols) || 3;
+  const rows = Math.round(obj.rows) || 3;
+
+  const blue = '#2a6dd4';
+  ctx2.strokeStyle = sel ? blue : multiSel ? '#e07820' : 'rgba(0,0,0,0.22)';
+  ctx2.lineWidth = sel ? 1.5 : 0.75;
+  ctx2.strokeRect(s.x, s.y, sw, sh);
+  ctx2.strokeStyle = sel ? 'rgba(42,109,212,0.3)' : 'rgba(0,0,0,0.1)';
+  ctx2.lineWidth = 0.5;
+  for (let c = 1; c < cols; c++) {
+    const x = s.x + (sw / cols) * c;
+    ctx2.beginPath(); ctx2.moveTo(x, s.y); ctx2.lineTo(x, s.y + sh); ctx2.stroke();
+  }
+  for (let r = 1; r < rows; r++) {
+    const y = s.y + (sh / rows) * r;
+    ctx2.beginPath(); ctx2.moveTo(s.x, y); ctx2.lineTo(s.x + sw, y); ctx2.stroke();
+  }
+  // dots at intersections
+  const dotR = Math.max(2.5, Math.min(5, 3.5 * state.zoom));
+  ctx2.fillStyle = sel ? blue : 'rgba(0,0,0,0.5)';
+  for (let c = 0; c <= cols; c++) {
+    for (let r = 0; r <= rows; r++) {
+      const dx = s.x + (sw / cols) * c;
+      const dy = s.y + (sh / rows) * r;
+      ctx2.beginPath(); ctx2.arc(dx, dy, dotR, 0, Math.PI * 2); ctx2.fill();
+    }
+  }
+  // label below: blue when selected, grey when not
+  const floors = obj.floors || 4;
+  ctx2.font = `${Math.max(9, 11 * state.zoom)}px DM Sans,sans-serif`;
+  ctx2.fillStyle = sel ? '#4a7fc8' : 'rgba(0,0,0,0.3)';
+  ctx2.fillText((obj.label || 'Grid') + '  ' + floors + ' fl.', s.x + 2, s.y + sh + 13);
+  if (sel) drawHandles(s.x, s.y, sw, sh);
+}
+
+function drawStair(obj, sel, yOff=0) {
+  const s = wts(obj.x, obj.y, yOff);
+  const sw = obj.w * state.zoom, sh = obj.h * state.zoom;
+  const steps = Math.max(4, Math.round(sh / (10 * state.zoom)));
+  ctx2.strokeStyle = sel ? '#2a6dd4' : 'rgba(0,0,0,0.28)';
+  ctx2.lineWidth = sel ? 1.5 : 0.75;
+  ctx2.strokeRect(s.x, s.y, sw, sh);
+  ctx2.lineWidth = 0.5;
+  for (let i = 1; i < steps; i++) {
+    const y = s.y + (sh / steps) * i;
+    ctx2.beginPath(); ctx2.moveTo(s.x, y); ctx2.lineTo(s.x + sw, y); ctx2.stroke();
+  }
+  // Direction arrow
+  const ax = s.x + sw/2, ay = s.y + 8 * state.zoom;
+  ctx2.beginPath(); ctx2.moveTo(ax, ay + 5); ctx2.lineTo(ax, ay - 3);
+  ctx2.moveTo(ax-4, ay); ctx2.lineTo(ax, ay-3); ctx2.lineTo(ax+4, ay);
+  ctx2.strokeStyle = sel ? '#2a6dd4' : 'rgba(0,0,0,0.4)'; ctx2.lineWidth = 1; ctx2.stroke();
+  if (sel) drawHandles(s.x, s.y, sw, sh);
+}
+
+function drawColumn(obj, sel, yOff=0) {
+  const s = wts(obj.x, obj.y, yOff);
+  const sz = 8 * state.zoom;
+  ctx2.fillStyle = sel ? '#4a7fc8' : 'rgba(0,0,0,0.6)';
+  ctx2.fillRect(s.x - sz/2, s.y - sz/2, sz, sz);
+}
+
+function drawLine2D(obj, sel, yOff=0) {
+  const a = wts(obj.x1, obj.y1, yOff), b = wts(obj.x2, obj.y2, yOff);
+  ctx2.save();
+  ctx2.strokeStyle = sel ? '#2a6dd4' : 'rgba(0,0,0,0.45)';
+  ctx2.lineWidth = sel ? 2 : 1.2;
+  ctx2.lineCap = 'round';
+  ctx2.beginPath(); ctx2.moveTo(a.x, a.y); ctx2.lineTo(b.x, b.y); ctx2.stroke();
+  if (sel) {
+    ctx2.fillStyle = '#2a6dd4';
+    [a, b].forEach(p => { ctx2.beginPath(); ctx2.arc(p.x, p.y, 4, 0, Math.PI*2); ctx2.fill(); });
+  }
+  ctx2.restore();
+}
+
+function drawTri(obj, sel, yOff=0) {
+  const s = wts(obj.x, obj.y, yOff);
+  const sw = obj.w * state.zoom, sh = obj.h * state.zoom;
+  ctx2.save();
+  ctx2.beginPath();
+  ctx2.moveTo(s.x + sw/2, s.y);
+  ctx2.lineTo(s.x + sw, s.y + sh);
+  ctx2.lineTo(s.x, s.y + sh);
+  ctx2.closePath();
+  ctx2.globalAlpha = 0.65;
+  ctx2.fillStyle = obj.color || '#e0ddd5'; ctx2.fill();
+  ctx2.globalAlpha = 1;
+  ctx2.strokeStyle = sel ? '#2a6dd4' : 'rgba(0,0,0,0.2)';
+  ctx2.lineWidth = sel ? 1.5 : 0.75;
+  ctx2.stroke();
+  if (sel) drawHandles(s.x, s.y, sw, sh);
+  ctx2.restore();
+}
+
+function drawCurve2D(obj, sel, yOff=0) {
+  const a = wts(obj.x1, obj.y1, yOff);
+  const b = wts(obj.x2, obj.y2, yOff);
+  const cp = wts(obj.cx, obj.cy, yOff);
+  ctx2.save();
+  ctx2.strokeStyle = sel ? '#2a6dd4' : 'rgba(0,0,0,0.45)';
+  ctx2.lineWidth = sel ? 2 : 1.2;
+  ctx2.lineCap = 'round';
+  ctx2.beginPath(); ctx2.moveTo(a.x, a.y);
+  ctx2.quadraticCurveTo(cp.x, cp.y, b.x, b.y);
+  ctx2.stroke();
+  if (sel) {
+    // Show control point
+    ctx2.setLineDash([3,3]);
+    ctx2.strokeStyle = 'rgba(74,127,200,0.5)';
+    ctx2.lineWidth = 1;
+    ctx2.beginPath(); ctx2.moveTo(a.x, a.y); ctx2.lineTo(cp.x, cp.y); ctx2.lineTo(b.x, b.y); ctx2.stroke();
+    ctx2.setLineDash([]);
+    ctx2.fillStyle = '#2a6dd4';
+    [a, b].forEach(p => { ctx2.beginPath(); ctx2.arc(p.x, p.y, 4, 0, Math.PI*2); ctx2.fill(); });
+    ctx2.fillStyle = 'rgba(74,127,200,0.6)';
+    ctx2.beginPath(); ctx2.arc(cp.x, cp.y, 4, 0, Math.PI*2); ctx2.fill();
+  }
+  ctx2.restore();
+}
+
+function drawLabel2D(obj, sel, yOff=0) {
+  const s = wts(obj.x, obj.y, yOff);
+  ctx2.save();
+  const fs = Math.max(10, 12 * state.zoom);
+  ctx2.font = `${fs}px DM Sans, sans-serif`;
+  ctx2.fillStyle = sel ? '#2a6dd4' : 'rgba(0,0,0,0.55)';
+  ctx2.textAlign = 'left'; ctx2.textBaseline = 'top';
+  ctx2.fillText(obj.text || '', s.x, s.y);
+  if (sel) {
+    const w = ctx2.measureText(obj.text || '').width;
+    ctx2.strokeStyle = '#2a6dd4'; ctx2.lineWidth = 1;
+    ctx2.setLineDash([2,2]);
+    ctx2.strokeRect(s.x - 2, s.y - 2, w + 4, fs + 4);
+  }
+  ctx2.restore();
+}
+
+function drawFurniture(obj, sel, yOff=0) {
+  const s = wts(obj.x, obj.y, yOff);
+  const sw = obj.w * state.zoom, sh = obj.h * state.zoom;
+  ctx2.save();
+  ctx2.globalAlpha = 0.85;
+  ctx2.fillStyle = sel ? 'rgba(74,127,200,0.12)' : 'rgba(0,0,0,0.04)';
+  ctx2.strokeStyle = sel ? '#4a7fc8' : 'rgba(0,0,0,0.3)';
+  ctx2.lineWidth = sel ? 1.5 : 1;
+  ctx2.beginPath(); ctx2.roundRect(s.x, s.y, sw, sh, 2); ctx2.fill(); ctx2.stroke();
+  // emoji label centered
+  const fs = Math.max(10, Math.min(sw, sh) * 0.5);
+  ctx2.globalAlpha = 0.7;
+  ctx2.font = fs + 'px serif';
+  ctx2.textAlign = 'center'; ctx2.textBaseline = 'middle';
+  ctx2.fillText(obj.emoji || '📦', s.x + sw/2, s.y + sh/2);
+  ctx2.globalAlpha = 1;
+  if (obj.label && state.zoom > 0.5) {
+    ctx2.font = `${Math.max(8, 9 * state.zoom)}px DM Mono, monospace`;
+    ctx2.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx2.textAlign = 'center'; ctx2.textBaseline = 'top';
+    ctx2.fillText(obj.label, s.x + sw/2, s.y + sh + 2);
+  }
+  ctx2.restore();
+  if (sel) drawHandles(s.x, s.y, sw, sh);
+}
+
+function drawCircle2D(obj, sel, yOff=0) {
+  // Support both cx/cy (new) and x+r/y+r (legacy)
+  const cx = obj.cx != null ? obj.cx : (obj.x + obj.r);
+  const cy = obj.cy != null ? obj.cy : (obj.y + obj.r);
+  const s = wts(cx, cy, yOff);
+  const sr = obj.r * state.zoom;
+  ctx2.fillStyle = obj.color || '#e0ddd5';
+  ctx2.globalAlpha = 0.72;
+  ctx2.beginPath(); ctx2.arc(s.x, s.y, sr, 0, Math.PI*2); ctx2.fill();
+  ctx2.globalAlpha = 1;
+  ctx2.strokeStyle = sel ? '#2a6dd4' : 'rgba(0,0,0,0.2)';
+  ctx2.lineWidth = sel ? 1.5 : 0.75;
+  ctx2.beginPath(); ctx2.arc(s.x, s.y, sr, 0, Math.PI*2); ctx2.stroke();
+}
+
+// Scale: 1 world unit = 0.5m (GSIZ=24px = 0.5m at zoom=1)
+const PX_PER_M = 48; // 48px = 1m at zoom=1
+
+function pxToM(px) { return px / PX_PER_M; } // world px → metres (zoom-independent)
+function mToWorld(m) { return m * PX_PER_M; }
+function snapM(m) { return Math.round(m * 2) / 2; } // snap to 0.5m
+
+function drawHandles(sx, sy, sw, sh) {
+  const pts = [
+    [sx, sy,'nw'],[sx+sw/2,sy,'n'],[sx+sw,sy,'ne'],
+    [sx,sy+sh/2,'w'],[sx+sw,sy+sh/2,'e'],
+    [sx,sy+sh,'sw'],[sx+sw/2,sy+sh,'s'],[sx+sw,sy+sh,'se']
+  ];
+  ctx2.fillStyle = '#fff';
+  ctx2.strokeStyle = '#4a7fc8';
+  ctx2.lineWidth = 1;
+  pts.forEach(([x,y]) => {
+    ctx2.beginPath(); ctx2.rect(x-3, y-3, 6, 6);
+    ctx2.fill(); ctx2.stroke();
+  });
+
+  // Dimension lines and labels
+  const wM = snapM(sw / state.zoom / PX_PER_M).toFixed(1); // screen→world→metres
+  const hM = snapM(sh / state.zoom / PX_PER_M).toFixed(1);
+  ctx2.save();
+  ctx2.font = '10px DM Mono, monospace';
+  ctx2.textAlign = 'center';
+  ctx2.textBaseline = 'middle';
+
+  // Draw dimension labels on all 4 sides
+  function dimLabel(text, cx, cy) {
+    const w = ctx2.measureText(text).width + 8;
+    ctx2.fillStyle = 'rgba(255,255,255,0.94)';
+    ctx2.strokeStyle = 'rgba(74,127,200,0.35)'; ctx2.lineWidth = 0.5;
+    ctx2.beginPath(); ctx2.roundRect(cx - w/2, cy - 7, w, 14, 3); ctx2.fill(); ctx2.stroke();
+    ctx2.fillStyle = '#4a7fc8';
+    ctx2.fillText(text, cx, cy + 1);
+  }
+  const wLabel = wM + ' m', hLabel = hM + ' m';
+  dimLabel(wLabel, sx + sw/2, sy - 9);       // top
+  dimLabel(wLabel, sx + sw/2, sy + sh + 9);  // bottom
+  dimLabel(hLabel, sx - 9, sy + sh/2);       // left  
+  dimLabel(hLabel, sx + sw + 9, sy + sh/2);  // right
+
+  ctx2.restore();
+  updateHandlesDOM(sx, sy, sw, sh);
+}
+
+// DOM handles for resize dragging
+let activeHandle = null;
+let handleDragStart = null;
+
+function updateHandlesDOM(sx, sy, sw, sh) {
+  const cont = document.getElementById('handles-overlay');
+  cont.innerHTML = '';
+  const obj = objects().find(o => o.id === state.selected);
+  if (!obj) return;
+  // sx,sy passed in are already screen coords (from wts), so use directly
+  // 8 handles: corners + edge midpoints
+  // dx/dy: -1=left/top edge moves, 0=right/bottom edge moves, null=no movement on that axis
+  const defs = [
+    {id:'nw', x:sx,       y:sy,       cur:'nwse-resize', lx:-1, ly:-1},
+    {id:'n',  x:sx+sw/2,  y:sy,       cur:'ns-resize',   lx:null,ly:-1},
+    {id:'ne', x:sx+sw,    y:sy,       cur:'nesw-resize',  lx: 1, ly:-1},
+    {id:'w',  x:sx,       y:sy+sh/2,  cur:'ew-resize',   lx:-1, ly:null},
+    {id:'e',  x:sx+sw,    y:sy+sh/2,  cur:'ew-resize',   lx: 1, ly:null},
+    {id:'sw', x:sx,       y:sy+sh,    cur:'nesw-resize',  lx:-1, ly: 1},
+    {id:'s',  x:sx+sw/2,  y:sy+sh,    cur:'ns-resize',   lx:null,ly: 1},
+    {id:'se', x:sx+sw,    y:sy+sh,    cur:'nwse-resize',  lx: 1, ly: 1},
+  ];
+  defs.forEach(d => {
+    const el = document.createElement('div');
+    el.className = 'rhandle';
+    el.style.left = d.x + 'px';
+    el.style.top  = d.y + 'px';
+    el.style.pointerEvents = 'all';
+    el.style.cursor = d.cur;
+    el.addEventListener('mousedown', ev => {
+      ev.preventDefault(); ev.stopPropagation();
+      activeHandle = { ...d, obj,
+        startX: ev.clientX, startY: ev.clientY,
+        origX: obj.x, origY: obj.y, origW: obj.w, origH: obj.h,
+        origCols: obj.cols || 3, origRows: obj.rows || 3 };
+    });
+    cont.appendChild(el);
+  });
+}
+
+function drawPreview() {
+  const s = state.drawStart, c = state.drawCurrent;
+  ctx2.save();
+  ctx2.strokeStyle = '#4a7fc8';
+  ctx2.lineWidth = 1.5;
+  ctx2.setLineDash([4, 3]);
+  ctx2.fillStyle = 'rgba(74,127,200,0.08)';
+  if (state.tool === 'rect' || state.tool === 'mass' || state.tool === 'slab') {
+    const x = Math.min(s.sx, c.sx), y = Math.min(s.sy, c.sy);
+    const w = Math.abs(c.sx - s.sx), h = Math.abs(c.sy - s.sy);
+    ctx2.fillRect(x, y, w, h);
+    ctx2.strokeRect(x, y, w, h);
+    // dim labels
+    const wx = Math.abs(c.wx - s.wx), wy = Math.abs(c.wy - s.wy);
+    const wM = (Math.abs(c.wx-s.wx) / PX_PER_M).toFixed(1), hM = (Math.abs(c.wy-s.wy) / PX_PER_M).toFixed(1);
+    ctx2.setLineDash([]);
+    ctx2.fillStyle = 'rgba(255,255,255,0.9)';
+    const mx = (x + x + w)/2, my = y - 4;
+    const tw = ctx2.measureText(wM+'m').width + 6;
+    ctx2.beginPath(); if(ctx2.roundRect) ctx2.roundRect(mx-tw/2-1,my-12,tw+2,13,3); ctx2.fill();
+    ctx2.fillStyle = '#2a6dd4';
+    ctx2.font = '10px DM Mono,monospace';
+    ctx2.textAlign='center'; ctx2.textBaseline='bottom';
+    ctx2.fillText(wM+'m', mx, my);
+    ctx2.textAlign='left'; ctx2.textBaseline='middle';
+    const hx = x+w+5, hy=(y+y+h)/2;
+    const hw = ctx2.measureText(hM+'m').width+6;
+    ctx2.fillStyle='rgba(255,255,255,0.9)';
+    ctx2.beginPath(); if(ctx2.roundRect) ctx2.roundRect(hx-1,hy-6,hw+2,13,3); ctx2.fill();
+    ctx2.fillStyle='#2a6dd4'; ctx2.fillText(hM+'m', hx+2, hy);
+  } else if (state.tool === 'grid') {
+    const x = Math.min(s.sx, c.sx), y = Math.min(s.sy, c.sy);
+    const w = Math.abs(c.sx - s.sx), h = Math.abs(c.sy - s.sy);
+    ctx2.strokeRect(x, y, w, h);
+    // grid lines preview
+    ctx2.lineWidth = 0.5; const cols = 3, rows = 3;
+    for (let col = 1; col < cols; col++) {
+      const gx = x + (w / cols) * col;
+      ctx2.beginPath(); ctx2.moveTo(gx, y); ctx2.lineTo(gx, y + h); ctx2.stroke();
+    }
+    for (let row = 1; row < rows; row++) {
+      const gy = y + (h / rows) * row;
+      ctx2.beginPath(); ctx2.moveTo(x, gy); ctx2.lineTo(x + w, gy); ctx2.stroke();
+    }
+  } else if (state.tool === 'circle') {
+    const r = Math.hypot(c.sx - s.sx, c.sy - s.sy);
+    ctx2.beginPath(); ctx2.arc(s.sx, s.sy, r, 0, Math.PI * 2);
+    ctx2.fill(); ctx2.stroke();
+  } else if (state.tool === 'line') {
+    ctx2.beginPath(); ctx2.moveTo(s.sx, s.sy); ctx2.lineTo(c.sx, c.sy); ctx2.stroke();
+  } else if (state.tool === 'tri') {
+    const x = Math.min(s.sx,c.sx), y = Math.min(s.sy,c.sy);
+    const w = Math.abs(c.sx-s.sx), h = Math.abs(c.sy-s.sy);
+    ctx2.beginPath(); ctx2.moveTo(x+w/2,y); ctx2.lineTo(x+w,y+h); ctx2.lineTo(x,y+h); ctx2.closePath();
+    ctx2.fill(); ctx2.stroke();
+  } else if (state.tool === 'curve') {
+    const mx = (s.sx+c.sx)/2, my = s.sy - Math.abs(c.sx-s.sx)*0.35;
+    ctx2.beginPath(); ctx2.moveTo(s.sx,s.sy); ctx2.quadraticCurveTo(mx,my,c.sx,c.sy); ctx2.stroke();
+  }
+  ctx2.restore();
+}
+
+// ═══════════════════════════════════════════════════════
+// THREE.JS SETUP
+// ═══════════════════════════════════════════════════════
+const vpEl = document.getElementById('viewport');
+const threeRenderer = new THREE.WebGLRenderer({ canvas: document.getElementById('three-canvas'), antialias: true });
+threeRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+threeRenderer.setClearColor(0xf5f3ef);
+threeRenderer.shadowMap.enabled = true;
+threeRenderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+const threeScene = new THREE.Scene();
+const threeScene2 = new THREE.Scene(); // render mode scene
+
+const threeCamera = new THREE.PerspectiveCamera(40, 1, 0.1, 2000);
+threeCamera.position.set(14, 12, 16);
+threeCamera.lookAt(0, 3, 0);
+
+// Lights
+const ambLight = new THREE.AmbientLight(0xffffff, 0.5);
+threeScene.add(ambLight);
+const sunLight = new THREE.DirectionalLight(0xfff8e8, 1.2);
+sunLight.position.set(12, 20, 10);
+sunLight.castShadow = true;
+sunLight.shadow.mapSize.set(2048, 2048);
+sunLight.shadow.camera.near = 0.5;
+sunLight.shadow.camera.far = 100;
+sunLight.shadow.camera.left = -20;
+sunLight.shadow.camera.right = 20;
+sunLight.shadow.camera.top = 20;
+sunLight.shadow.camera.bottom = -40;
+threeScene.add(sunLight);
+const fillLight = new THREE.DirectionalLight(0xd8e8ff, 0.4);
+fillLight.position.set(-8, 6, -8);
+threeScene.add(fillLight);
+
+// Ground
+const groundGeo = new THREE.PlaneGeometry(60, 60);
+const groundMat = new THREE.MeshStandardMaterial({ color: 0xeeebd4, roughness: 0.95 });
+const ground = new THREE.Mesh(groundGeo, groundMat);
+ground.rotation.x = -Math.PI / 2;
+ground.receiveShadow = true;
+threeScene.add(ground);
+
+// Grid helper
+const grid3D = new THREE.GridHelper(40, 40, 0xccccbb, 0xddddcc);
+grid3D.material.opacity = 0.4; grid3D.material.transparent = true;
+threeScene.add(grid3D);
+
+// No ghost context buildings
+
+// ── 3D BUILDING MESHES ──
+let building3D = [];
+
+function rebuild3D() {
+  building3D.forEach(m => threeScene.remove(m));
+  building3D = [];
+
+  const SC = 1 / 48; // 48 world-px = 1 metre
+  const CX = PLAN_W / 2;  // half of PLAN_W — horizontal centre
+  const CZ = PLAN_H / 2;  // half of PLAN_H — depth centre
+
+  // Only render Plan 01 objects in 3D.
+  // "floors" on each object = total storeys → drives building height.
+  const objs = state.plans[0].objects;
+
+  objs.forEach(obj => {
+
+    // ── MASS ──
+    if (obj.type === 'mass' || obj.type === 'wall') {
+      const floors = obj.floors || 4;
+      const fh     = obj.floorH || 3.2;
+      const totalH = floors * fh;
+      const cx = (obj.x + obj.w / 2 - CX) * SC;
+      const cz = (obj.y + obj.h / 2 - CZ) * SC;
+      const mesh = new THREE.Mesh(
+        new THREE.BoxGeometry(obj.w * SC, totalH, obj.h * SC),
+        new THREE.MeshStandardMaterial({
+          color: new THREE.Color(obj.color || '#d4cfc8').multiplyScalar(1.05),
+          roughness: 0.7, metalness: 0.05
+        })
+      );
+      mesh.position.set(cx, totalH / 2, cz);
+      mesh.castShadow = true; mesh.receiveShadow = true;
+      threeScene.add(mesh); building3D.push(mesh);
+      // Floor slab lines
+      const slabMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5 });
+      for (let f = 1; f < floors; f++) {
+        const slab = new THREE.Mesh(
+          new THREE.BoxGeometry(obj.w * SC + 0.05, 0.08, obj.h * SC + 0.05), slabMat
+        );
+        slab.position.set(cx, f * fh, cz);
+        threeScene.add(slab); building3D.push(slab);
+      }
+    }
+
+    // ── SLAB — flat panel at each defined floor level ──
+    if (obj.type === 'slab') {
+      const floors = obj.floors || 1;
+      const fh     = obj.floorH || 3.2;
+      const cx = (obj.x + obj.w / 2 - CX) * SC;
+      const cz = (obj.y + obj.h / 2 - CZ) * SC;
+      const mat = new THREE.MeshStandardMaterial({
+        color: new THREE.Color(obj.color || '#d8d4cc'), roughness: 0.85
+      });
+      for (let f = 0; f < floors; f++) {
+        const slab = new THREE.Mesh(
+          new THREE.BoxGeometry(obj.w * SC, 0.3, obj.h * SC), mat
+        );
+        slab.position.set(cx, f * fh + 0.15, cz);
+        slab.receiveShadow = true;
+        threeScene.add(slab); building3D.push(slab);
+      }
+    }
+
+
+    // ── STRUCTURAL GRID ──
+    if (obj.type === 'grid') {
+      const cols   = obj.cols   || 3;
+      const rows   = obj.rows   || 3;
+      const floors = obj.floors || 4;
+      const fh     = obj.floorH || 3.2;
+      const totalH = floors * fh;
+
+      const colSz   = 0.3;
+      const beamSz  = 0.18;
+      const colMat  = new THREE.MeshStandardMaterial({ color: 0xd8cfb8, roughness: 0.6 });
+      const beamMat = new THREE.MeshStandardMaterial({ color: 0xccc4a8, roughness: 0.65 });
+
+      // Columns at every grid intersection
+      for (let c = 0; c <= cols; c++) {
+        for (let r = 0; r <= rows; r++) {
+          const col = new THREE.Mesh(
+            new THREE.BoxGeometry(colSz, totalH, colSz),
+            colMat
+          );
+          col.position.set(
+            (obj.x + (obj.w / cols) * c - CX) * SC,
+            totalH / 2,
+            (obj.y + (obj.h / rows) * r - CZ) * SC
+          );
+          col.castShadow = false;
+          threeScene.add(col);
+          building3D.push(col);
+        }
+      }
+
+      // Beams at each floor level
+      for (let f = 1; f <= floors; f++) {
+        const by = f * fh;
+
+        // X-direction beams (along cols)
+        for (let r = 0; r <= rows; r++) {
+          const bx = new THREE.Mesh(
+            new THREE.BoxGeometry(obj.w * SC, beamSz, beamSz),
+            beamMat
+          );
+          bx.position.set(
+            (obj.x + obj.w / 2 - CX) * SC,
+            by,
+            (obj.y + (obj.h / rows) * r - CZ) * SC
+          );
+          threeScene.add(bx);
+          building3D.push(bx);
+        }
+
+        // Z-direction beams (along rows)
+        for (let c = 0; c <= cols; c++) {
+          const bz = new THREE.Mesh(
+            new THREE.BoxGeometry(beamSz, beamSz, obj.h * SC),
+            beamMat
+          );
+          bz.position.set(
+            (obj.x + (obj.w / cols) * c - CX) * SC,
+            by,
+            (obj.y + obj.h / 2 - CZ) * SC
+          );
+          threeScene.add(bz);
+          building3D.push(bz);
+        }
+      }
+    }
+
+    // ── STAIR ──
+    // ── STAIR — straight single flight ──
+    if (obj.type === 'stair') {
+      const floors = obj.floors || 1;
+      const fh     = obj.floorH || 3.2;
+      const stairW = obj.w * SC;
+      const stairD = obj.h * SC;
+      const cx     = (obj.x + obj.w / 2 - CX) * SC;
+      const cz_bot = (obj.y - CZ) * SC;
+
+      // Steps per floor = round(floorH / 0.2)
+      const stepsPerFloor = Math.max(1, Math.round(fh / 0.2));
+      const riserH = fh / stepsPerFloor;   // actual riser height
+      const treadD = stairD / stepsPerFloor; // tread depth fills stair footprint
+
+      const matStep     = new THREE.MeshStandardMaterial({ color: new THREE.Color(obj.color || '#c8c0b0'), roughness: 0.8 });
+      const matStringer = new THREE.MeshStandardMaterial({ color: 0xaaa090, roughness: 0.7 });
+      const railMat     = new THREE.MeshStandardMaterial({ color: 0x888080, roughness: 0.4, metalness: 0.4 });
+
+      // One flight per floor — like slabs stacking vertically
+      for (let f = 0; f < floors; f++) {
+        const baseY = f * fh;
+
+        // Steps for this floor
+        for (let s = 0; s < stepsPerFloor; s++) {
+          const tread = new THREE.Mesh(
+            new THREE.BoxGeometry(stairW, riserH * 0.18, treadD),
+            matStep
+          );
+          tread.position.set(
+            cx,
+            baseY + s * riserH + riserH - riserH * 0.09,
+            cz_bot + s * treadD + treadD / 2
+          );
+          threeScene.add(tread); building3D.push(tread);
+        }
+
+        // Side stringers for this floor
+        [-1, 1].forEach(side => {
+          const stringer = new THREE.Mesh(
+            new THREE.BoxGeometry(0.12, fh, stairD),
+            matStringer
+          );
+          stringer.position.set(
+            cx + side * (stairW / 2 - 0.06),
+            baseY + fh / 2,
+            cz_bot + stairD / 2
+          );
+          threeScene.add(stringer); building3D.push(stringer);
+
+          // Handrail bar
+          const rail = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, stairD), railMat);
+          rail.position.set(cx + side * (stairW / 2 - 0.06), baseY + fh + 0.9, cz_bot + stairD / 2);
+          threeScene.add(rail); building3D.push(rail);
+
+          // Posts at top and bottom of each flight
+          [-0.1, stairD - 0.1].forEach(pz => {
+            const post = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.9, 0.06), railMat);
+            post.position.set(cx + side * (stairW / 2 - 0.06), baseY + fh + 0.45, cz_bot + pz);
+            threeScene.add(post); building3D.push(post);
+          });
+        });
+      }
+    }
+
+
+  }); // end objs.forEach
+
+  requestRender();
+}
+
+// ── ORBIT CAMERA (two-axis, no auto-rotate) ──
+let orbitTheta = 0.6;    // horizontal angle (radians)
+let orbitPhi = 0.92;     // vertical angle (radians, 0=top, π/2=horizon)
+let orbitDist = 22;      // distance from target
+const orbitTarget = new THREE.Vector3(0, 3, 0);
+
+let vpMouseDown = false, vpLastX = 0, vpLastY = 0;
+
+function setCameraFromOrbit() {
+  const sinPhi = Math.sin(orbitPhi);
+  const cosPhi = Math.cos(orbitPhi);
+  threeCamera.position.set(
+    orbitTarget.x + orbitDist * sinPhi * Math.sin(orbitTheta),
+    orbitTarget.y + orbitDist * cosPhi,
+    orbitTarget.z + orbitDist * sinPhi * Math.cos(orbitTheta)
+  );
+  threeCamera.lookAt(orbitTarget);
+}
+
+const vpEl2 = document.getElementById('viewport');
+vpEl2.style.cursor = 'grab';
+vpEl2.addEventListener('mousedown', e => {
+  if (e.button !== 0) return;
+  vpMouseDown = true;
+  vpLastX = e.clientX;
+  vpLastY = e.clientY;
+  vpEl2.style.cursor = 'grabbing';
+  e.preventDefault();
+});
+
+vpEl2.addEventListener('wheel', e => {
+  e.preventDefault();
+  orbitDist = Math.max(1, Math.min(500, orbitDist + e.deltaY * 0.08));
+  requestRender();
+}, { passive: false });
+
+// render3D defined above in RAF loop
+
+function zoomExtents() {
+  if (building3D.length === 0) {
+    orbitDist = 22; orbitTarget.set(0, 3, 0); render3D(); return;
+  }
+  const box = new THREE.Box3();
+  building3D.forEach(m => box.expandByObject(m));
+  const center = new THREE.Vector3(), size = new THREE.Vector3();
+  box.getCenter(center); box.getSize(size);
+  orbitTarget.copy(center);
+  const maxDim = Math.max(size.x, size.y, size.z);
+  orbitDist = Math.max(6, (maxDim / 2) / Math.tan(threeCamera.fov * Math.PI / 360) * 1.7);
+  requestRender();
+}
+
+// Continuous render loop (no auto-rotate - only redraws when needed)
+setCameraFromOrbit();
+let needsRender = true;
+function render3D() {
+  setCameraFromOrbit();
+  threeRenderer.render(threeScene, threeCamera);
+  needsRender = false;
+}
+function requestRender() { needsRender = true; }
+function renderLoop() {
+  if (needsRender) render3D();
+  requestAnimationFrame(renderLoop);
+}
+renderLoop();
+
+// ═══════════════════════════════════════════════════════
+// 2D CANVAS INTERACTION
+// ═══════════════════════════════════════════════════════
+function getCanvasPos(e) {
+  const r = planCanvas.getBoundingClientRect();
+  return { sx: e.clientX - r.left, sy: e.clientY - r.top };
+}
+
+// Marquee state
+let marqueeActive = false;
+let marqueeStart = null;
+let marqueeEnd = null;
+
+function startMarquee(sx, sy) {
+  marqueeActive = true;
+  marqueeStart = { sx, sy };
+  marqueeEnd = { sx, sy };
+  const el = document.getElementById('marquee-rect');
+  el.classList.add('show');
+  updateMarqueeEl();
+}
+
+function updateMarqueeEl() {
+  if (!marqueeStart || !marqueeEnd) return;
+  const el = document.getElementById('marquee-rect');
+  const x = Math.min(marqueeStart.sx, marqueeEnd.sx);
+  const y = Math.min(marqueeStart.sy, marqueeEnd.sy);
+  const w = Math.abs(marqueeEnd.sx - marqueeStart.sx);
+  const h = Math.abs(marqueeEnd.sy - marqueeStart.sy);
+  el.style.left = x + 'px'; el.style.top = y + 'px';
+  el.style.width = w + 'px'; el.style.height = h + 'px';
+}
+
+function finishMarquee() {
+  const el = document.getElementById('marquee-rect');
+  el.classList.remove('show');
+  if (!marqueeStart || !marqueeEnd) { marqueeActive = false; return; }
+  const mx0 = Math.min(marqueeStart.sx, marqueeEnd.sx);
+  const my0 = Math.min(marqueeStart.sy, marqueeEnd.sy);
+  const mx1 = Math.max(marqueeStart.sx, marqueeEnd.sx);
+  const my1 = Math.max(marqueeStart.sy, marqueeEnd.sy);
+
+  // Only trigger if dragged a meaningful distance
+  if ((mx1 - mx0) < 4 && (my1 - my0) < 4) {
+    marqueeActive = false; marqueeStart = null; marqueeEnd = null;
+    return;
+  }
+
+  const yOff = planOriginY(state.currentPlan);
+  multiSelected = objects().filter(obj => {
+    if (obj.type === 'line') return false;
+    const s = wts(obj.x != null ? obj.x : obj.cx, obj.y != null ? obj.y : obj.cy, yOff);
+    const sw = (obj.w || (obj.r * 2) || 10) * state.zoom;
+    const sh = (obj.h || (obj.r * 2) || 10) * state.zoom;
+    return s.x >= mx0 && s.y >= my0 && s.x + sw <= mx1 && s.y + sh <= my1;
+  }).map(o => o.id);
+
+  marqueeActive = false; marqueeStart = null; marqueeEnd = null;
+
+  if (multiSelected.length > 0) {
+    state.selected = null;
+    showMultiPopup(mx0, my0, multiSelected.length);
+  }
+  draw2D();
+}
+
+function showMultiPopup(x, y, count) {
+  const popup = document.getElementById('multi-popup');
+  popup.classList.add('show');
+  popup.style.left = x + 'px';
+  popup.style.top = (y - 40) + 'px';
+  document.getElementById('multi-count').textContent = count + ' object' + (count !== 1 ? 's' : '');
+}
+
+function deleteMultiSelected() {
+  plan().objects = objects().filter(o => !multiSelected.includes(o.id));
+  multiSelected = [];
+  document.getElementById('multi-popup').classList.remove('show');
+  draw2D(); rebuild3D();
+}
+
+planCanvas.addEventListener('mousedown', e => {
+  // Middle mouse = pan
+  if (e.button === 1) {
+    e.preventDefault();
+    state.panning = true;
+    state.panStartX = e.clientX; state.panStartY = e.clientY;
+    state.panOriginX = state.panX; state.panOriginY = state.panY;
+    planCanvas.style.cursor = 'grabbing';
+    return;
+  }
+  if (e.button === 2) return;
+
+  const { sx, sy } = getCanvasPos(e);
+  document.getElementById('multi-popup').classList.remove('show');
+  multiSelected = [];
+  hidePopups();
+
+  // Space held = pan
+  if (spaceDown) {
+    state.panning = true;
+    state.panStartX = e.clientX; state.panStartY = e.clientY;
+    state.panOriginX = state.panX; state.panOriginY = state.panY;
+    return;
+  }
+
+  // Place pending furniture
+  if (state.pendingFurniture) {
+    if (placeFurniture(sx, sy)) {
+      state.pendingFurniture = null;
+      planCanvas.style.cursor = 'default';
+      rebuild3D();
+    }
+    return;
+  }
+
+  if (state.tool === 'select') {
+    const hit = hitTest(sx, sy);
+    if (hit) {
+      // click on object: select and allow drag
+      state.selected = hit.id;
+      state.dragging = true;
+      state.dragStartX = sx; state.dragStartY = sy;
+      state.dragObjX = hit.x; state.dragObjY = hit.y;
+      showPropsPanel(hit);
+      draw2D();
+    } else {
+      // click on empty: start pan
+      state.selected = null;
+      const clickedPlan = getPlanAtScreenPos(sx, sy);
+      if (clickedPlan !== null && clickedPlan !== state.currentPlan) { switchPlan(clickedPlan); return; }
+      state.panning = true;
+      state.panStartX = e.clientX; state.panStartY = e.clientY;
+      state.panOriginX = state.panX; state.panOriginY = state.panY;
+      draw2D();
+    }
+    return;
+  }
+
+  if (state.tool === 'marquee') {
+    state.selected = null;
+    startMarquee(sx, sy);
+    return;
+  }
+
+  // Drawing tools: start draw (coords relative to current plan)
+  const baseY = planOriginY(state.currentPlan);
+  const snapW = screenToWorld(sx, sy);
+  const snapX = snapToGrid(snapW.x);
+  const snapY = snapToGrid(snapW.y - baseY); // plan-relative y
+  state.drawing = true;
+  state.drawStart = {
+    wx: snapX, wy: snapY,
+    sx: snapX * state.zoom + state.panX,
+    sy: (snapY + baseY) * state.zoom + state.panY
+  };
+  state.drawCurrent = { ...state.drawStart };
+  state.snapDot = { sx: state.drawStart.sx, sy: state.drawStart.sy };
+});
+
+// (drawing mousemove handled by unified window handler)
+
+// (mouse events handled by unified window handlers below)
+
+planCanvas.addEventListener('dblclick', e => {
+  const { sx, sy } = getCanvasPos(e);
+  const hit = hitTest(sx, sy);
+  if (!hit) return;
+  const newLabel = prompt('Rename:', hit.label || hit.type);
+  if (newLabel !== null) { hit.label = newLabel; draw2D(); }
+});
+
+planCanvas.addEventListener('contextmenu', e => {
+  e.preventDefault();
+  const { sx, sy } = getCanvasPos(e);
+  showCtxMenu(sx, sy, e.clientX, e.clientY);
+});
+
+// Panning with middle mouse or space+drag
+let spaceDown = false, panStart = null, panOrigin = null;
+window.addEventListener('keydown', e => {
+  // Never intercept when user is typing in an input/textarea/select
+  const inInput = e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT' || e.target.isContentEditable;
+
+  // Undo / Redo — allowed even in inputs? No — standard browser behaviour handles that.
+  // Only intercept undo/redo on canvas
+  if (!inInput) {
+    if ((e.metaKey || e.ctrlKey) && e.code === 'KeyZ' && !e.shiftKey) { e.preventDefault(); historyUndo(); return; }
+    if ((e.metaKey || e.ctrlKey) && (e.code === 'KeyY' || (e.code === 'KeyZ' && e.shiftKey))) { e.preventDefault(); historyRedo(); return; }
+    if ((e.metaKey || e.ctrlKey) && e.code === 'KeyC') { copySelected(); return; }
+    if ((e.metaKey || e.ctrlKey) && e.code === 'KeyV') { pasteSelected(); return; }
+  }
+
+  if (inInput) return; // stop here — don't trigger tool shortcuts or delete
+
+  if (e.code === 'Space') { spaceDown = true; planCanvas.style.cursor = 'grab'; }
+  if (e.code === 'KeyV') setTool('select');
+  if (e.code === 'KeyM') setTool('marquee');
+  if (e.code === 'KeyF') openFurniturePicker();
+  if (e.code === 'KeyR') setTool('rect');
+  if (e.code === 'KeyG') setTool('grid');
+  if (e.code === 'KeyL') setTool('line');
+  if (e.code === 'KeyC') setTool('circle');
+  if (e.code === 'Escape') {
+    state.selected = null; multiSelected = [];
+    hidePopups(); draw2D();
+  }
+  if (e.code === 'Delete' || e.code === 'Backspace') {
+    if (multiSelected.length > 0) deleteMultiSelected();
+    else deleteSelected();
+  }
+});
+window.addEventListener('keyup', e => {
+  if (e.code === 'Space') { spaceDown = false; updateCursor(); }
+});
+
+planCanvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  const { sx, sy } = getCanvasPos(e);
+  const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
+  const newZoom = Math.max(0.3, Math.min(4, state.zoom * zoomFactor));
+  state.panX = sx - (sx - state.panX) * (newZoom / state.zoom);
+  state.panY = sy - (sy - state.panY) * (newZoom / state.zoom);
+  state.zoom = newZoom;
+  document.getElementById('zoom-pct').textContent = Math.round(state.zoom * 100) + '%';
+  draw2D();
+}, { passive: false });
+
+function finishDraw(sx, sy) {
+  state.drawing = false;
+  state.snapDot = null;
+  const s = state.drawStart, c = state.drawCurrent;
+  if (!s || !c) return;
+
+  const wx = Math.min(s.wx, c.wx), wy = Math.min(s.wy, c.wy);
+  const ww = Math.abs(c.wx - s.wx), wh = Math.abs(c.wy - s.wy);
+
+  if (ww < 4 && wh < 4) { draw2D(); return; }
+
+  let obj;
+  if (state.tool === 'rect' || state.tool === 'mass') {
+    obj = { id: nextId(), type: 'mass', x: wx, y: wy, w: ww, h: wh, color: '#e8e5dc', floors: 4, floorH: 3.2 };
+  } else if (state.tool === 'slab') {
+    obj = { id: nextId(), type: 'slab', x: wx, y: wy, w: ww, h: wh, color: '#d8d4cc', floors: 1 };
+  } else if (state.tool === 'grid') {
+    obj = { id: nextId(), type: 'grid', x: wx, y: wy, w: ww, h: wh, cols: 3, rows: 3, floors: 4, floorH: 3.2, label: 'Grid' };
+  } else if (state.tool === 'circle') {
+    const r = Math.max(ww, wh) / 2;
+    obj = { id: nextId(), type: 'circle', cx: wx + r, cy: wy + r, r, color: '#e8e5dc' };
+  } else if (state.tool === 'line') {
+    obj = { id: nextId(), type: 'line', x1: s.wx, y1: s.wy, x2: c.wx, y2: c.wy };
+  } else if (state.tool === 'tri') {
+    if (ww < 4 || wh < 4) { draw2D(); return; }
+    obj = { id: nextId(), type: 'tri', x: wx, y: wy, w: ww, h: wh, color: '#e8e5dc' };
+  } else if (state.tool === 'curve') {
+    obj = { id: nextId(), type: 'curve', x1: s.wx, y1: s.wy, x2: c.wx, y2: c.wy,
+      cx: (s.wx + c.wx) / 2, cy: s.wy - Math.abs(c.wx - s.wx) * 0.35 };
+  } else if (state.tool === 'text') {
+    const txt = prompt('Label:', '');
+    if (!txt) { draw2D(); return; }
+    obj = { id: nextId(), type: 'label', x: wx, y: wy, text: txt };
+  } else {
+    draw2D(); return;
+  }
+
+  objects().push(obj);
+  state.selected = obj.id;
+  draw2D(); rebuild3D();
+  showPropsPanel(obj);
+  document.getElementById('status-dot').classList.add('active');
+  state.drawStart = null;
+}
+
+function getPlanAtScreenPos(sx, sy) {
+  for (let i = 0; i < state.plans.length; i++) {
+    const yOff = planOriginY(i);
+    const bs = wts(0, 0, yOff);
+    const pw = PLAN_W * state.zoom, ph = PLAN_H * state.zoom;
+    if (sx >= bs.x && sx <= bs.x + pw && sy >= bs.y && sy <= bs.y + ph) return i;
+  }
+  return null;
+}
+
+function hitTest(sx, sy) {
+  const yOff = planOriginY(state.currentPlan);
+  const objs = objects();
+  for (let i = objs.length - 1; i >= 0; i--) {
+    const obj = objs[i];
+    if (obj.type === 'line') continue;
+    if (obj.type === 'line' || obj.type === 'curve') continue; // skip line types
+    if (obj.type === 'circle') {
+      const c = wts(obj.cx != null ? obj.cx : (obj.x + obj.r), obj.cy != null ? obj.cy : (obj.y + obj.r), yOff);
+      if (Math.hypot(sx - c.x, sy - c.y) <= (obj.r || 10) * state.zoom) return obj;
+    } else if (obj.x != null) {
+      const s = wts(obj.x, obj.y, yOff);
+      const sw = (obj.w || 10) * state.zoom;
+      const sh = (obj.h || 10) * state.zoom;
+      if (sx >= s.x && sx <= s.x + sw && sy >= s.y && sy <= s.y + sh) return obj;
+    }
+  }
+  return null;
+}
+
+// ═══════════════════════════════════════════════════════
+// POPUPS
+// ═══════════════════════════════════════════════════════
+const COLORS_NAMED = [
+  {hex:'#e8e5dc',name:'Stone'   },{hex:'#d8d4cc',name:'Concrete'},
+  {hex:'#c8b84a',name:'Gold'    },{hex:'#d4836a',name:'Terracotta'},
+  {hex:'#7aabcd',name:'Sky'     },{hex:'#8fc47a',name:'Sage'},
+  {hex:'#c47ab0',name:'Rose'    },{hex:'#cd9a6a',name:'Sand'},
+  {hex:'#6a8bcd',name:'Slate'   },{hex:'#c8c8c8',name:'Silver'},
+  {hex:'#8b6c52',name:'Timber'  },{hex:'#2d2d2d',name:'Charcoal'},
+];
+
+function showObjPopup(obj, sx, sy) {
+  document.getElementById('obj-popup').classList.remove('show');
+  showCtxToolbar(obj);
+}
+
+function showPropsPanel(obj) { showCtxToolbar(obj); }
+
+function gel(id) { return document.getElementById(id); }
+function show(id, on) { const el = gel(id); if (el) el.style.display = on ? '' : 'none'; }
+function setVal(id, v) { const el = gel(id); if (el) el.value = v; }
+function setText(id, v) { const el = gel(id); if (el) el.textContent = v; }
+
+function showCtxToolbar(obj) {
+  if (!obj) return;
+  const tb = gel('ctx-toolbar');
+  if (!tb) return;
+  tb.classList.add('show');
+
+  const NAMES = { mass:'Mass', grid:'Grid', stair:'Stair', slab:'Slab',
+    wall:'Wall', circle:'Circle', tri:'Triangle', line:'Line',
+    curve:'Arc', label:'Text', furniture:'Furniture' };
+  setText('ctx-type-label', NAMES[obj.type] || obj.type);
+
+  const t = obj.type;
+  const hasDims   = ['mass','slab','wall','stair','circle','tri','furniture'].includes(t);
+  const isGrid    = t === 'grid';
+  const hasFloors = ['mass','slab','wall','grid','stair'].includes(t);
+  const hasColor  = !['line','curve','label'].includes(t); // all drawable types have color
+
+  // Show/hide groups
+  show('grp-mass',   hasDims);
+  show('grp-grid',   isGrid);
+  show('grp-floors', hasFloors);
+  show('div-floors', hasFloors);
+  const dot = gel('ctx-color-dot');
+  if (dot) dot.style.display = hasColor ? '' : 'none';
+
+  // Populate dims
+  if (hasDims && obj.w != null) {
+    setVal('prop-w', pxToM(obj.w).toFixed(1));
+    setVal('prop-h', pxToM(obj.h).toFixed(1));
+  }
+
+  // Populate grid bay spacing
+  if (isGrid && obj.w != null) {
+    const cols = obj.cols || 3, rows = obj.rows || 3;
+    setVal('prop-cols',  cols);
+    setVal('prop-rows',  rows);
+    setVal('prop-bay-w', pxToM(obj.w / cols).toFixed(2));
+    setVal('prop-bay-d', pxToM(obj.h / rows).toFixed(2));
+  }
+
+  // Floors + floor height
+  if (hasFloors) {
+    setVal('prop-stories', obj.floors || 4);
+    setVal('prop-flrh', (obj.floorH || 3.2).toFixed(1));
+  }
+
+  // Color dot
+  if (hasColor && dot) {
+    dot.style.background = obj.color || '#e8e5dc';
+    // Rebuild dropdown next open to reflect new object
+    const cd = gel('ctx-color-dropdown');
+    if (cd) delete cd.dataset.built;
+  }
+}
+
+function updateCtxToolbar(obj) {
+  const tb = gel('ctx-toolbar');
+  if (!obj || !tb || !tb.classList.contains('show')) return;
+  if (obj.type === 'grid') {
+    const cols = obj.cols || 3, rows = obj.rows || 3;
+    setVal('prop-cols',  cols);
+    setVal('prop-rows',  rows);
+    setVal('prop-bay-w', pxToM(obj.w / cols).toFixed(2));
+    setVal('prop-bay-d', pxToM(obj.h / rows).toFixed(2));
+  } else {
+    setVal('prop-w', pxToM(obj.w || 0).toFixed(2));
+    setVal('prop-h', pxToM(obj.h || 0).toFixed(2));
+  }
+}
+
+function updatePropsPanel(obj) { updateCtxToolbar(obj); }
+
+// Live input handler — doesn't reset input value (user is still typing)
+function applyPropLive(key, inputEl) {
+  const val = parseFloat(inputEl.value);
+  if (isNaN(val) || val <= 0) return; // ignore mid-type invalid values
+  applyProp(key, val, /*silent=*/true);
+}
+
+// Grid: user changes cols or rows count directly
+function applyGridCount(which, inputEl) {
+  const val = Math.max(1, Math.round(parseFloat(inputEl.value)));
+  if (isNaN(val)) return;
+  const obj = objects().find(o => o.id === state.selected);
+  if (!obj || obj.type !== 'grid') return;
+  if (which === 'cols') obj.cols = val;
+  if (which === 'rows') obj.rows = val;
+  // Update bay size readouts without touching the count inputs
+  const bayW = pxToM(obj.w / obj.cols).toFixed(2);
+  const bayD = pxToM(obj.h / obj.rows).toFixed(2);
+  setVal('prop-bay-w', bayW);
+  setVal('prop-bay-d', bayD);
+  draw2D(); rebuild3D();
+}
+
+// Grid: user changes bay spacing → recompute count + resize grid
+function applyGridBay(axis, inputEl) {
+  const val = parseFloat(inputEl.value);
+  if (isNaN(val) || val < 0.5) return;
+  const obj = objects().find(o => o.id === state.selected);
+  if (!obj || obj.type !== 'grid') return;
+  const bayPx = mToWorld(val);
+  if (axis === 'w') {
+    // Keep cols fixed, resize total width
+    obj.w = Math.max(PX_PER_M * 0.5, bayPx * obj.cols);
+    setVal('prop-bay-w', val.toFixed(2));
+  }
+  if (axis === 'd') {
+    obj.h = Math.max(PX_PER_M * 0.5, bayPx * obj.rows);
+    setVal('prop-bay-d', val.toFixed(2));
+  }
+  draw2D(); rebuild3D();
+}
+
+function applyProp(key, val, silent=false) {
+  const obj = objects().find(o => o.id === state.selected);
+  if (!obj) return;
+
+  if (obj.type !== 'grid') {
+    // grid dimensions handled by applyGridBay / applyGridCount
+    if (key === 'w') { obj.w = Math.max(PX_PER_M * 0.5, mToWorld(val)); }
+    if (key === 'h') { obj.h = Math.max(PX_PER_M * 0.5, mToWorld(val)); }
+  }
+
+  if (key === 'floors') { obj.floors = Math.max(1, Math.round(val)); }
+  if (key === 'floorH') { obj.floorH = Math.max(2.0, Math.min(6.0, val)); }
+
+  if (!silent) historySnapshot();
+  draw2D(); rebuild3D();
+  if (!silent) showCtxToolbar(obj);
+  else {
+    // Just update the read-only readouts without touching inputs
+    if (obj.type === 'grid') setText('prop-cols-disp', obj.cols + ' × ' + obj.rows);
+  }
+}
+
+function updateObjPopupPos(sx, sy) {
+  const popup = document.getElementById('obj-popup');
+  if (!popup.classList.contains('show')) return;
+  popup.style.left = (sx - 60) + 'px';
+  popup.style.top = (sy - 50) + 'px';
+}
+
+function showCtxMenu(sx, sy, cx, cy) {
+  const menu = document.getElementById('ctx-menu');
+  menu.classList.add('show');
+  menu.style.left = sx + 'px';
+  menu.style.top = sy + 'px';
+}
+
+function hidePopups() {
+  document.getElementById('ctx-menu').classList.remove('show');
+  document.getElementById('obj-popup').classList.remove('show');
+  document.getElementById('plan-dropdown').classList.remove('show');
+  document.getElementById('multi-popup').classList.remove('show');
+  document.getElementById('ctx-toolbar').classList.remove('show');
+  document.getElementById('handles-overlay').innerHTML = '';
+  multiSelected = [];
+}
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('#ctx-menu')) {
+    document.getElementById('ctx-menu').classList.remove('show');
+  }
+  if (!e.target.closest('#plan-dropdown') && !e.target.closest('#plan-pill-btn')) {
+    document.getElementById('plan-dropdown').classList.remove('show');
+  }
+});
+
+// ═══════════════════════════════════════════════════════
+// TOOLBAR / TOOLS
+// ═══════════════════════════════════════════════════════
+function openFurniturePicker() {
+  const picker = document.getElementById('furniture-picker');
+  picker.classList.toggle('show');
+  if (picker.classList.contains('show')) renderFurnGrid();
+}
+
+function setTool(t) {
+  state.tool = t;
+  document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+  const btn = document.getElementById('t-' + t);
+  if (btn) btn.classList.add('active');
+  updateCursor();
+}
+
+function updateCursor() {
+  if (spaceDown) { planCanvas.style.cursor = 'grab'; return; }
+  const cursors = { select: 'default', marquee: 'crosshair', rect: 'crosshair', grid: 'crosshair',
+    line: 'crosshair', circle: 'crosshair', pen: 'crosshair', text: 'text', stamp: 'copy' };
+  planCanvas.style.cursor = cursors[state.tool] || 'crosshair';
+}
+
+function zoomSelected2D() {
+  const obj = objects().find(o => o.id === state.selected);
+  if (!obj) { fit2D(); return; }
+  const margin = 60;
+  const W = planCanvas.width, H = planCanvas.height;
+  const yOff = planOriginY(state.currentPlan);
+  const ow = obj.w || 48, oh = obj.h || 48;
+  const ox = obj.x, oy = (obj.y || 0) + yOff;
+  const zx = (W - margin * 2) / Math.max(ow, 1);
+  const zy = (H - margin * 2) / Math.max(oh, 1);
+  state.zoom = Math.min(zx, zy, 20);
+  state.panX = W / 2 - (ox + ow / 2) * state.zoom;
+  state.panY = H / 2 - (oy + oh / 2) * state.zoom;
+  document.getElementById('zoom-pct').textContent = Math.round(state.zoom * 100) + '%';
+  draw2D();
+}
+
+function fit2D() {
+  // Fit all plan sheets into the visible canvas
+  const numPlans = state.plans.length;
+  const totalWorldH = numPlans * (PLAN_H + PLAN_GAP) - PLAN_GAP;
+  const margin = 40;
+  const W = planCanvas.width, H = planCanvas.height;
+  const zoomX = (W - margin * 2) / PLAN_W;
+  const zoomY = (H - margin * 2) / totalWorldH;
+  state.zoom = Math.min(zoomX, zoomY);
+  state.panX = margin + (W - margin*2 - PLAN_W * state.zoom) / 2;
+  state.panY = margin;
+  document.getElementById('zoom-pct').textContent = Math.round(state.zoom * 100) + '%';
+  draw2D();
+}
+
+function zoom2D(delta) {
+  const cx = planCanvas.width / 2, cy = planCanvas.height / 2;
+  const newZoom = Math.max(0.01, Math.min(20, state.zoom + delta));
+  state.panX = cx - (cx - state.panX) * (newZoom / state.zoom);
+  state.panY = cy - (cy - state.panY) * (newZoom / state.zoom);
+  state.zoom = newZoom;
+  document.getElementById('zoom-pct').textContent = Math.round(state.zoom * 100) + '%';
+  draw2D();
+}
+
+// ═══════════════════════════════════════════════════════
+// PLAN MANAGEMENT
+// ═══════════════════════════════════════════════════════
+document.getElementById('plan-pill-btn').addEventListener('click', e => {
+  e.stopPropagation();
+  document.getElementById('plan-dropdown').classList.toggle('show');
+});
+
+function switchPlan(idx) {
+  state.currentPlan = idx;
+  // Scroll canvas so selected plan sheet is visible (40px from top)
+  const yOff = planOriginY(idx);
+  state.panY = 40 - yOff * state.zoom;
+  const plan = state.plans[idx];
+  document.getElementById('plan-area-label').textContent = plan.name + ': ' + plan.subtitle;
+  document.querySelector('#plan-select').value = idx;
+  document.querySelectorAll('.plan-item').forEach((el, i) => {
+    el.classList.toggle('active', i === idx);
+  });
+  hidePopups(); draw2D();
+}
+
+function addPlan() {
+  const n = state.plans.length + 1;
+  state.plans.push({ name: `Plan 0${n}`, subtitle: `Floor ${n}`, objects: [], gridBG: false });
+  const dd = document.getElementById('plan-dropdown');
+  const addBtn = dd.querySelector('.plan-add');
+  const item = document.createElement('div');
+  item.className = 'plan-item';
+  item.innerHTML = `<div class="plan-item-dot"></div>Plan 0${n} — Floor ${n}`;
+  item.onclick = () => switchPlan(n - 1);
+  dd.insertBefore(item, addBtn);
+  const opt = document.createElement('option');
+  opt.value = n - 1; opt.textContent = `Plan 0${n}`;
+  document.getElementById('plan-select').appendChild(opt);
+  switchPlan(n - 1);
+}
+
+// ═══════════════════════════════════════════════════════
+// OBJECT ACTIONS
+// ═══════════════════════════════════════════════════════
+function deleteSelected() {
+  if (state.selected === null) return;
+  plan().objects = objects().filter(o => o.id !== state.selected);
+  state.selected = null;
+  hidePopups(); draw2D(); rebuild3D();
+}
+
+let colorIdx = 0;
+function buildColorDropdown() {
+  const dd = gel('ctx-color-dropdown');
+  if (!dd || dd.dataset.built) return;
+  dd.dataset.built = '1';
+  COLORS_NAMED.forEach(c => {
+    const btn = document.createElement('button');
+    btn.className = 'ctx-color-option';
+    btn.dataset.hex = c.hex;
+    btn.innerHTML = `<span class="ctx-color-swatch-sm" style="background:${c.hex}"></span>${c.name}`;
+    btn.onclick = () => setObjColor(c.hex);
+    dd.appendChild(btn);
+  });
+}
+
+function toggleColorDropdown(e) {
+  e.stopPropagation();
+  buildColorDropdown();
+  const dd = gel('ctx-color-dropdown');
+  dd.classList.toggle('open');
+  // Mark active
+  const obj = objects().find(o => o.id === state.selected);
+  if (obj) {
+    dd.querySelectorAll('.ctx-color-option').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.hex === (obj.color || '#e8e5dc'));
+    });
+  }
+}
+
+function copySelected() {
+  const obj = objects().find(o => o.id === state.selected);
+  if (obj) clipboard = JSON.parse(JSON.stringify(obj));
+}
+
+function pasteSelected() {
+  if (!clipboard) return;
+  historySnapshot();
+  const copy = { ...JSON.parse(JSON.stringify(clipboard)), id: nextId() };
+  if (copy.x != null) { copy.x += PX_PER_M; copy.y += PX_PER_M; }
+  if (copy.cx != null) { copy.cx += PX_PER_M; copy.cy += PX_PER_M; }
+  objects().push(copy);
+  state.selected = copy.id;
+  draw2D(); rebuild3D(); showCtxToolbar(copy);
+}
+
+function setObjColor(hex) {
+  gel('ctx-color-dropdown').classList.remove('open');
+  const obj = objects().find(o => o.id === state.selected);
+  if (!obj) return;
+  obj.color = hex;
+  colorIdx = COLORS_NAMED.findIndex(c => c.hex === hex);
+  const dot = gel('ctx-color-dot');
+  if (dot) dot.style.background = hex;
+  draw2D(); rebuild3D();
+}
+
+function cycleColor() { toggleColorDropdown({stopPropagation:()=>{}}); }
+
+function changeObjType() {
+  const obj = objects().find(o => o.id === state.selected);
+  if (!obj) return;
+  obj.type = document.getElementById('obj-type').value.toLowerCase();
+  draw2D(); rebuild3D();
+}
+
+// Context menu actions
+function ctxAddGrid() {
+  hidePopups();
+  setTool('grid');
+}
+function ctxAddMass() {
+  hidePopups();
+  setTool('rect');
+}
+function ctxDuplicate() {
+  hidePopups();
+  const obj = objects().find(o => o.id === state.selected);
+  if (!obj) return;
+  const copy = { ...obj, id: nextId(), x: obj.x + GRID_SZ * 2, y: obj.y + GRID_SZ * 2 };
+  objects().push(copy);
+  state.selected = copy.id;
+  draw2D(); rebuild3D();
+}
+
+// ═══════════════════════════════════════════════════════
+// VIEW / RENDER MODES
+// ═══════════════════════════════════════════════════════
+function setVPMode(mode) {
+  state.viewMode = mode;
+  const vp = document.getElementById('vbtn-persp');
+  const vo = document.getElementById('vbtn-ortho');
+  if (vp) { vp.classList.toggle('active', mode === 'persp'); }
+  if (vo) { vo.classList.toggle('active', mode === 'ortho'); }
+  if (mode === 'ortho') {
+    orbitPhi = 0.01; // nearly top-down
+    orbitDist = 30;
+  } else {
+    orbitPhi = 0.92;
+    orbitDist = 22;
+  }
+  requestRender();
+}
+
+function cycleViewMode() { /* future: top/front/side */ }
+
+function triggerRender() {
+  // Flash a render effect
+  const vp = document.getElementById('viewport');
+  vp.style.transition = 'filter 0.3s';
+  vp.style.filter = 'saturate(1.4) contrast(1.05)';
+  threeRenderer.setClearColor(0xf5f0e8);
+  sunLight.intensity = 1.6;
+  render3D();
+  setTimeout(() => {
+    vp.style.filter = '';
+    threeRenderer.setClearColor(0xf5f3ef);
+    sunLight.intensity = 1.2;
+    render3D();
+  }, 2000);
+}
+
+function openChat() {
+  alert('Chat feature — connect to Anthropic API to enable AI architectural consultation.');
+}
+
+// ═══════════════════════════════════════════════════════
+// INITIAL STATE — pre-seed with example project from video
+// ═══════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════
+// CONTEXT TOOLBAR HELPERS
+// ═══════════════════════════════════════════════════════
+
+function toggleTypeDropdown(e) {
+  e.stopPropagation();
+  const dd = document.getElementById('ctx-type-dropdown');
+  dd.classList.toggle('open');
+  // Mark active item
+  const cur = objects().find(o => o.id === state.selected);
+  if (cur) {
+    dd.querySelectorAll('.ctx-type-option').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.type === cur.type);
+    });
+  }
+}
+
+function setObjType(type) {
+  document.getElementById('ctx-type-dropdown').classList.remove('open');
+  const obj = objects().find(o => o.id === state.selected);
+  if (!obj) return;
+  obj.type = type;
+  showCtxToolbar(obj);
+  draw2D(); rebuild3D();
+}
+
+// Close dropdowns when clicking outside
+document.addEventListener('click', () => {
+  const td = gel('ctx-type-dropdown'); if (td) td.classList.remove('open');
+  const cd = gel('ctx-color-dropdown'); if (cd) cd.classList.remove('open');
+});
+
+function deleteSel() {
+  if (state.selected == null) return;
+  historySnapshot();
+  plan().objects = objects().filter(o => o.id !== state.selected);
+  state.selected = null;
+  hidePopups(); draw2D(); rebuild3D();
+}
+
+// ═══════════════════════════════════════════════════════
+// FURNITURE PICKER
+// ═══════════════════════════════════════════════════════
+const FURNITURE = {
+  seating: [
+    { emoji:'🪑', label:'Chair',    w:0.5, h:0.5 },
+    { emoji:'🛋️', label:'Sofa 2',   w:1.8, h:0.9 },
+    { emoji:'🛋️', label:'Sofa 3',   w:2.4, h:0.9 },
+    { emoji:'💺', label:'Armchair', w:0.8, h:0.8 },
+    { emoji:'🪑', label:'Stool',    w:0.4, h:0.4 },
+  ],
+  tables: [
+    { emoji:'⬛', label:'Desk',     w:1.6, h:0.8 },
+    { emoji:'⬜', label:'Table 4',  w:1.4, h:0.8 },
+    { emoji:'⬜', label:'Table 6',  w:1.8, h:0.9 },
+    { emoji:'🔵', label:'Round',   w:1.0, h:1.0 },
+    { emoji:'⬛', label:'Counter',  w:2.4, h:0.6 },
+  ],
+  beds: [
+    { emoji:'🛏️', label:'Single',   w:0.9, h:2.0 },
+    { emoji:'🛏️', label:'Double',   w:1.4, h:2.0 },
+    { emoji:'🛏️', label:'King',     w:1.8, h:2.0 },
+    { emoji:'🛁', label:'Bath',     w:0.8, h:1.7 },
+    { emoji:'🚿', label:'Shower',   w:0.9, h:0.9 },
+  ],
+  plants: [
+    { emoji:'🌿', label:'Plant S',  w:0.3, h:0.3 },
+    { emoji:'🌳', label:'Tree',     w:0.8, h:0.8 },
+    { emoji:'🌲', label:'Tree L',   w:1.5, h:1.5 },
+    { emoji:'🪴', label:'Pot',      w:0.4, h:0.4 },
+    { emoji:'🌵', label:'Cactus',   w:0.3, h:0.3 },
+  ],
+};
+
+let activeFurnCat = 'seating';
+let activeFurnItem = null;
+
+function setFurnCat(cat) {
+  activeFurnCat = cat;
+  document.querySelectorAll('.furn-cat-btn').forEach(b =>
+    b.classList.toggle('active', b.textContent.toLowerCase() === cat)
+  );
+  renderFurnGrid();
+}
+
+function renderFurnGrid() {
+  const grid = document.getElementById('furn-grid');
+  const items = FURNITURE[activeFurnCat] || [];
+  grid.innerHTML = '';
+  items.forEach((item, i) => {
+    const el = document.createElement('div');
+    el.className = 'furn-item' + (activeFurnItem === activeFurnCat + i ? ' active' : '');
+    el.title = item.label;
+    el.textContent = item.emoji;
+    el.addEventListener('click', () => {
+      activeFurnItem = activeFurnCat + i;
+      renderFurnGrid();
+      state.pendingFurniture = item;
+      document.getElementById('furniture-picker').classList.remove('show');
+      planCanvas.style.cursor = 'copy';
+    });
+    grid.appendChild(el);
+  });
+}
+
+// place furniture on canvas click
+function placeFurniture(sx, sy) {
+  const item = state.pendingFurniture;
+  if (!item) return false;
+  const w = s2w(sx, sy);
+  const obj = {
+    id: nextId(), type: 'furniture',
+    x: w.x - mToWorld(item.w) / 2,
+    y: w.y - mToWorld(item.h) / 2,
+    w: mToWorld(item.w), h: mToWorld(item.h),
+    label: item.label, emoji: item.emoji,
+    color: '#e8e5dc',
+  };
+  objects().push(obj);
+  draw2D();
+  return true;
+}
+
+function s2w(sx, sy) { return screenToWorld(sx, sy); }
+// mToWorld defined above
+
+// ═══════════════════════════════════════════════════════
+// IMPROVED PLAN LABEL (floats above plan boundary)
+// ═══════════════════════════════════════════════════════
+function drawPlanLabel() {
+  const bs = worldToScreen(0, 0);
+  ctx2.save();
+  ctx2.font = `${Math.max(9, 11 * state.zoom)}px DM Sans, sans-serif`;
+  ctx2.fillStyle = 'rgba(0,0,0,0.28)';
+  ctx2.fillText(plan().name + ': ' + plan().subtitle, bs.x + 2, bs.y - 6);
+  ctx2.restore();
+}
+
+function seedProject() {
+  const p0 = state.plans[0].objects;
+  // 30m × 16m structural grid: 6 cols × 4 rows, 5m × 4m bays, 4 storeys
+  p0.push({ id: nextId(), type: 'grid',
+    x: 480, y: 480, w: 1440, h: 768,
+    cols: 6, rows: 4, floors: 4, floorH: 3.2, label: 'Grid 01' });
+  // Mass volume enclosing the grid
+  p0.push({ id: nextId(), type: 'mass',
+    x: 432, y: 432, w: 1536, h: 864,
+    color: '#ddd9d0', floors: 4, floorH: 3.2 });
+  // Stair core
+  p0.push({ id: nextId(), type: 'stair',
+    x: 1968, y: 576, w: 192, h: 288 });
+
+  // Plan 02 starts empty (ghost of plan 01 shows as reference)
+  rebuild3D();
+  historySnapshot(); // baseline for undo
+}
+
+// ═══════════════════════════════════════════════════════
+// DIVIDER DRAG
+// ═══════════════════════════════════════════════════════
+const divider = document.getElementById('divider');
+let divDragging = false, divStartX = 0, divStartLeft = 0;
+divider.addEventListener('mousedown', e => {
+  divDragging = true; divStartX = e.clientX;
+  const main = document.getElementById('main');
+  divStartLeft = main.getBoundingClientRect().width * 0.5;
+  e.preventDefault();
+});
+
+// ═══════════════════════════════════════════════════════
+// UNIFIED WINDOW MOUSE HANDLERS
+// ═══════════════════════════════════════════════════════
+window.addEventListener('mousemove', e => {
+  // ── Divider ──
+  if (divDragging) {
+    const main = document.getElementById('main');
+    const totalW = main.clientWidth;
+    const newLeft = Math.max(200, Math.min(totalW - 200, divStartLeft + (e.clientX - divStartX)));
+    const pct = (newLeft / totalW * 100).toFixed(1);
+    main.style.gridTemplateColumns = `${pct}% 1px 1fr`;
+    document.getElementById('toolbar').style.width = pct + '%';
+    document.getElementById('toolbar-right').style.width = (100 - parseFloat(pct)) + '%';
+    resizeCanvases();
+    return;
+  }
+
+  // ── 3D Orbit ──
+  if (vpMouseDown) {
+    const dx = e.clientX - vpLastX;
+    const dy = e.clientY - vpLastY;
+    vpLastX = e.clientX; vpLastY = e.clientY;
+    orbitTheta -= dx * 0.008;
+    orbitPhi = Math.max(0.08, Math.min(Math.PI * 0.9, orbitPhi - dy * 0.008));
+    requestRender();
+    return;
+  }
+
+  // ── Handle resize drag ──
+  if (activeHandle) {
+    const rawDx = (e.clientX - activeHandle.startX) / state.zoom;
+    const rawDy = (e.clientY - activeHandle.startY) / state.zoom;
+    const obj = activeHandle.obj;
+
+    if (obj.type === 'grid') {
+      // GRID: bay size (W/D) is FIXED. Dragging only changes col/row COUNT.
+      // Snap to whole bay increments. cols/rows = how many bays fit in dragged size.
+      const bayW = activeHandle.origW / (activeHandle.origCols || obj.cols || 3);
+      const bayD = activeHandle.origH / (activeHandle.origRows || obj.rows || 3);
+
+      // Compute how many bays in each direction from drag delta
+      let newCols = obj.cols, newRows = obj.rows;
+      if (activeHandle.lx !== null) {
+        const totalW = activeHandle.lx === 1
+          ? activeHandle.origW + rawDx
+          : activeHandle.origW - rawDx;
+        newCols = Math.max(1, Math.round(totalW / bayW));
+      }
+      if (activeHandle.ly !== null) {
+        const totalH = activeHandle.ly === 1
+          ? activeHandle.origH + rawDy
+          : activeHandle.origH - rawDy;
+        newRows = Math.max(1, Math.round(totalH / bayD));
+      }
+
+      // Apply: keep bay size fixed, resize grid by snapping to whole bays
+      const newW = newCols * bayW;
+      const newH = newRows * bayD;
+
+      if (activeHandle.lx === -1) { obj.x = activeHandle.origX + (activeHandle.origW - newW); }
+      if (activeHandle.lx !== null) obj.w = newW;
+      if (activeHandle.ly === -1) { obj.y = activeHandle.origY + (activeHandle.origH - newH); }
+      if (activeHandle.ly !== null) obj.h = newH;
+
+      obj.cols = newCols;
+      obj.rows = newRows;
+
+    } else {
+      // MASS/SLAB: snap to 0.5m grid
+      const snap = PX_PER_M * 0.5;
+      const dx = Math.round(rawDx / snap) * snap;
+      const dy = Math.round(rawDy / snap) * snap;
+      const min = snap;
+
+      if (activeHandle.lx === -1) { obj.w = Math.max(min, activeHandle.origW - dx); obj.x = activeHandle.origX + (activeHandle.origW - obj.w); }
+      else if (activeHandle.lx === 1) { obj.w = Math.max(min, activeHandle.origW + dx); }
+      if (activeHandle.ly === -1) { obj.h = Math.max(min, activeHandle.origH - dy); obj.y = activeHandle.origY + (activeHandle.origH - obj.h); }
+      else if (activeHandle.ly === 1) { obj.h = Math.max(min, activeHandle.origH + dy); }
+    }
+
+    draw2D(); updatePropsPanel(obj);
+    updateCtxToolbar(obj);
+    return;
+  }
+
+  // ── Plan canvas: pan / marquee / drag / draw ──
+  const r = planCanvas.getBoundingClientRect();
+  const sx = e.clientX - r.left, sy = e.clientY - r.top;
+
+  if (state.panning) {
+    state.panX = state.panOriginX + (e.clientX - state.panStartX);
+    state.panY = state.panOriginY + (e.clientY - state.panStartY);
+    draw2D();
+    return;
+  }
+
+  if (marqueeActive && marqueeStart) {
+    marqueeEnd = { sx, sy };
+    updateMarqueeEl();
+    return;
+  }
+
+  if (state.dragging && state.selected) {
+    const dx = (sx - state.dragStartX) / state.zoom;
+    const dy = (sy - state.dragStartY) / state.zoom;
+    const obj = objects().find(o => o.id === state.selected);
+    if (obj) {
+      obj.x = snapToGrid(state.dragObjX + dx);
+      obj.y = snapToGrid(state.dragObjY + dy);
+      draw2D();
+    }
+    return;
+  }
+
+  if (state.drawing && state.drawStart) {
+    const baseY = planOriginY(state.currentPlan);
+    const rawW = screenToWorld(sx, sy);
+    const sX = snapToGrid(rawW.x);
+    const sY = snapToGrid(rawW.y - baseY);
+    state.drawCurrent = {
+      wx: sX, wy: sY,
+      sx: sX * state.zoom + state.panX,
+      sy: (sY + baseY) * state.zoom + state.panY
+    };
+    state.snapDot = { sx: state.drawCurrent.sx, sy: state.drawCurrent.sy };
+    draw2D();
+  }
+});
+
+window.addEventListener('mouseup', e => {
+  // ── Divider ──
+  if (divDragging) { divDragging = false; return; }
+
+  // ── 3D Orbit ──
+  if (vpMouseDown) { vpMouseDown = false; vpEl2.style.cursor = ''; return; }
+
+  // ── Handle resize release ──
+  if (activeHandle) { activeHandle = null; historySnapshot(); rebuild3D(); draw2D(); return; }
+
+  // ── Plan canvas ──
+  if (state.panning) {
+    state.panning = false;
+    planCanvas.style.cursor = spaceDown ? 'grab' : (state.tool in {select:1,marquee:1} ? 'default' : 'crosshair');
+    return;
+  }
+  if (marqueeActive) { finishMarquee(); return; }
+  if (state.dragging) { state.dragging = false; rebuild3D(); return; }
+  if (state.drawing) {
+    state.snapDot = null;
+    const r = planCanvas.getBoundingClientRect();
+    const sx = e.clientX - r.left, sy = e.clientY - r.top;
+    finishDraw(sx, sy);
+  }
+});
+
+// ═══════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════
+window.addEventListener('resize', resizeCanvases);
+setTool('rect');
+seedProject();
+// Fit both views after layout settles
+function initAll() {
+  if (!planCanvas.clientWidth || !planCanvas.clientHeight) {
+    requestAnimationFrame(initAll); return;
+  }
+  resizeCanvases();
+  setVPMode('persp');
+  fit2D();
+  setTimeout(() => { zoomExtents(); }, 100); // after rebuild3D completes
+}
+requestAnimationFrame(initAll);
+</script>
+</body>
+</html>
