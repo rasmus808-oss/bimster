@@ -884,11 +884,26 @@ function draw2D() {
       ctx2.fillText('+' + elev + 'm', bs.x + pw - 50 * state.zoom, bs.y - 7);
     }
 
-    // Always show plan below as ghost reference (like Vorform tracing paper)
+    // Upper plans: section cut through Plan 01 objects at 1.2m above this floor's elevation
     if (idx > 0) {
+      // Compute this floor's base elevation by summing floors*floorH of all plans below
+      let elevM = 0;
+      for (let i = 0; i < idx; i++) {
+        const rep = state.plans[i].objects.find(o => ['mass','grid','slab','wall','stair'].includes(o.type));
+        elevM += (rep ? (rep.floors || 4) : 4) * (rep ? (rep.floorH || 3.2) : 3.2);
+      }
+      const cutM = elevM + 1.2; // standard 1.2m section cut height above floor
+
       ctx2.save();
-      ctx2.globalAlpha = 0.28;
-      state.plans[idx - 1].objects.forEach(obj => drawObject2D(obj, idx));
+      state.plans[0].objects.forEach(obj => {
+        const fl = obj.floors || 1;
+        const fh = obj.floorH || 3.2;
+        let topM = 0;
+        if (['mass','wall','grid','stair'].includes(obj.type)) topM = fl * fh;
+        else if (obj.type === 'slab') topM = (fl - 1) * fh + 0.3;
+        else topM = cutM + 1; // non-volumetric: always show
+        if (cutM <= topM) drawSectionCut(obj, idx);
+      });
       ctx2.restore();
     }
 
@@ -994,6 +1009,75 @@ function wts(wx, wy, yOff) {
   return { x: wx * state.zoom + state.panX, y: (wy + yOff) * state.zoom + state.panY };
 }
 
+// ── SECTION CUT RENDERER ──
+// Draws obj as a 2D architectural section cut on an upper plan sheet.
+// isCut=true: object body is sliced → bold border + diagonal hatch
+function drawSectionCut(obj, planIdx) {
+  const yOff = planOriginY(planIdx);
+  ctx2.save();
+
+  if (obj.type === 'circle') {
+    const ocx = obj.cx != null ? obj.cx : (obj.x + obj.r);
+    const ocy = obj.cy != null ? obj.cy : (obj.y + obj.r);
+    const sc = wts(ocx, ocy, yOff);
+    const sr = obj.r * state.zoom;
+    ctx2.globalAlpha = 0.55;
+    ctx2.fillStyle = obj.color || '#d8d4cc';
+    ctx2.beginPath(); ctx2.arc(sc.x, sc.y, sr, 0, Math.PI*2); ctx2.fill();
+    ctx2.globalAlpha = 1;
+    ctx2.strokeStyle = 'rgba(0,0,0,0.7)';
+    ctx2.lineWidth = 1.8;
+    ctx2.beginPath(); ctx2.arc(sc.x, sc.y, sr, 0, Math.PI*2); ctx2.stroke();
+    ctx2.restore();
+    return;
+  }
+
+  if (!obj.x == null || !obj.w) { ctx2.restore(); return; }
+
+  const s = wts(obj.x, obj.y, yOff);
+  const sw = obj.w * state.zoom, sh = obj.h * state.zoom;
+
+  // Fill
+  ctx2.globalAlpha = 0.55;
+  ctx2.fillStyle = obj.color || '#d8d4cc';
+  ctx2.fillRect(s.x, s.y, sw, sh);
+  ctx2.globalAlpha = 1;
+
+  // Diagonal hatch for solid cut objects
+  if (obj.type === 'mass' || obj.type === 'wall' || obj.type === 'grid') {
+    ctx2.save();
+    ctx2.beginPath(); ctx2.rect(s.x, s.y, sw, sh); ctx2.clip();
+    ctx2.strokeStyle = 'rgba(0,0,0,0.2)';
+    ctx2.lineWidth = 0.8;
+    const sp = Math.max(6, 10 * state.zoom);
+    for (let d2 = -(sw + sh); d2 < sw + sh; d2 += sp) {
+      ctx2.beginPath();
+      ctx2.moveTo(s.x + d2, s.y);
+      ctx2.lineTo(s.x + d2 + sh, s.y + sh);
+      ctx2.stroke();
+    }
+    ctx2.restore();
+  }
+
+  // Stair section: show step lines
+  if (obj.type === 'stair') {
+    const steps = Math.max(4, Math.round(sh / (10 * state.zoom)));
+    ctx2.strokeStyle = 'rgba(0,0,0,0.35)';
+    ctx2.lineWidth = 0.6;
+    for (let i = 1; i < steps; i++) {
+      const y2 = s.y + (sh / steps) * i;
+      ctx2.beginPath(); ctx2.moveTo(s.x, y2); ctx2.lineTo(s.x + sw, y2); ctx2.stroke();
+    }
+  }
+
+  // Bold border
+  ctx2.strokeStyle = 'rgba(0,0,0,0.72)';
+  ctx2.lineWidth = 1.8;
+  ctx2.strokeRect(s.x, s.y, sw, sh);
+
+  ctx2.restore();
+}
+
 function drawRect(obj, sel, multiSel, yOff=0) {
   const s = wts(obj.x, obj.y, yOff);
   const sw = obj.w * state.zoom, sh = obj.h * state.zoom;
@@ -1055,6 +1139,17 @@ function drawGrid(obj, sel, multiSel=false, yOff=0) {
 function drawStair(obj, sel, yOff=0) {
   const s = wts(obj.x, obj.y, yOff);
   const sw = obj.w * state.zoom, sh = obj.h * state.zoom;
+
+  // Punch a white hole over any overlapping slab
+  state.plans[state.currentPlan].objects.forEach(other => {
+    if (other.type !== 'slab') return;
+    if (obj.x < other.x + other.w && obj.x + obj.w > other.x &&
+        obj.y < other.y + other.h && obj.y + obj.h > other.y) {
+      ctx2.fillStyle = '#fafaf8';
+      ctx2.fillRect(s.x, s.y, sw, sh);
+    }
+  });
+
   const steps = Math.max(4, Math.round(sh / (10 * state.zoom)));
   ctx2.strokeStyle = sel ? '#2a6dd4' : 'rgba(0,0,0,0.28)';
   ctx2.lineWidth = sel ? 1.5 : 0.75;
@@ -1445,18 +1540,49 @@ function rebuild3D() {
     if (obj.type === 'slab') {
       const floors = obj.floors || 1;
       const fh     = obj.floorH || 3.2;
-      const cx = (obj.x + obj.w / 2 - CX) * SC;
-      const cz = (obj.y + obj.h / 2 - CZ) * SC;
       const mat = new THREE.MeshStandardMaterial({
         color: new THREE.Color(obj.color || '#d8d4cc'), roughness: 0.85
       });
+
+      // Find stair footprints overlapping this slab
+      const stairs = objs.filter(o =>
+        o.type === 'stair' &&
+        o.x < obj.x + obj.w && o.x + o.w > obj.x &&
+        o.y < obj.y + obj.h && o.y + o.h > obj.y
+      );
+
       for (let f = 0; f < floors; f++) {
-        const slab = new THREE.Mesh(
-          new THREE.BoxGeometry(obj.w * SC, 0.3, obj.h * SC), mat
-        );
-        slab.position.set(cx, f * fh + 0.15, cz);
-        slab.receiveShadow = true;
-        threeScene.add(slab); building3D.push(slab);
+        const slabY = f * fh + 0.15;
+
+        if (stairs.length === 0) {
+          const cx = (obj.x + obj.w / 2 - CX) * SC;
+          const cz = (obj.y + obj.h / 2 - CZ) * SC;
+          const slab = new THREE.Mesh(new THREE.BoxGeometry(obj.w * SC, 0.3, obj.h * SC), mat);
+          slab.position.set(cx, slabY, cz);
+          slab.receiveShadow = true;
+          threeScene.add(slab); building3D.push(slab);
+        } else {
+          // Split slab into strips around the first stair hole
+          const st = stairs[0];
+          const hx0 = Math.max(obj.x, st.x);
+          const hx1 = Math.min(obj.x + obj.w, st.x + st.w);
+          const hy0 = Math.max(obj.y, st.y);
+          const hy1 = Math.min(obj.y + obj.h, st.y + st.h);
+          const rects = [];
+          if (hy0 > obj.y)          rects.push({ x: obj.x, y: obj.y, w: obj.w,      h: hy0 - obj.y });
+          if (hy1 < obj.y + obj.h)  rects.push({ x: obj.x, y: hy1,   w: obj.w,      h: obj.y + obj.h - hy1 });
+          if (hx0 > obj.x)          rects.push({ x: obj.x, y: hy0,   w: hx0 - obj.x, h: hy1 - hy0 });
+          if (hx1 < obj.x + obj.w)  rects.push({ x: hx1,   y: hy0,   w: obj.x + obj.w - hx1, h: hy1 - hy0 });
+          rects.forEach(r => {
+            if (r.w <= 0 || r.h <= 0) return;
+            const rcx = (r.x + r.w / 2 - CX) * SC;
+            const rcz = (r.y + r.h / 2 - CZ) * SC;
+            const piece = new THREE.Mesh(new THREE.BoxGeometry(r.w * SC, 0.3, r.h * SC), mat);
+            piece.position.set(rcx, slabY, rcz);
+            piece.receiveShadow = true;
+            threeScene.add(piece); building3D.push(piece);
+          });
+        }
       }
     }
 
@@ -1543,53 +1669,20 @@ function rebuild3D() {
       const riserH = fh / stepsPerFloor;   // actual riser height
       const treadD = stairD / stepsPerFloor; // tread depth fills stair footprint
 
-      const matStep     = new THREE.MeshStandardMaterial({ color: new THREE.Color(obj.color || '#c8c0b0'), roughness: 0.8 });
-      const matStringer = new THREE.MeshStandardMaterial({ color: 0xaaa090, roughness: 0.7 });
-      const railMat     = new THREE.MeshStandardMaterial({ color: 0x888080, roughness: 0.4, metalness: 0.4 });
+      const matStep = new THREE.MeshStandardMaterial({ color: new THREE.Color(obj.color || '#c8c0b0'), roughness: 0.8 });
 
-      // One flight per floor — like slabs stacking vertically
+      // One flight per floor — steps only
       for (let f = 0; f < floors; f++) {
         const baseY = f * fh;
-
-        // Steps for this floor
         for (let s = 0; s < stepsPerFloor; s++) {
           const tread = new THREE.Mesh(
-            new THREE.BoxGeometry(stairW, riserH * 0.18, treadD),
+            new THREE.BoxGeometry(stairW, riserH, treadD),
             matStep
           );
-          tread.position.set(
-            cx,
-            baseY + s * riserH + riserH - riserH * 0.09,
-            cz_bot + s * treadD + treadD / 2
-          );
+          tread.position.set(cx, baseY + s * riserH + riserH / 2, cz_bot + s * treadD + treadD / 2);
+          tread.receiveShadow = true;
           threeScene.add(tread); building3D.push(tread);
         }
-
-        // Side stringers for this floor
-        [-1, 1].forEach(side => {
-          const stringer = new THREE.Mesh(
-            new THREE.BoxGeometry(0.12, fh, stairD),
-            matStringer
-          );
-          stringer.position.set(
-            cx + side * (stairW / 2 - 0.06),
-            baseY + fh / 2,
-            cz_bot + stairD / 2
-          );
-          threeScene.add(stringer); building3D.push(stringer);
-
-          // Handrail bar
-          const rail = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, stairD), railMat);
-          rail.position.set(cx + side * (stairW / 2 - 0.06), baseY + fh + 0.9, cz_bot + stairD / 2);
-          threeScene.add(rail); building3D.push(rail);
-
-          // Posts at top and bottom of each flight
-          [-0.1, stairD - 0.1].forEach(pz => {
-            const post = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.9, 0.06), railMat);
-            post.position.set(cx + side * (stairW / 2 - 0.06), baseY + fh + 0.45, cz_bot + pz);
-            threeScene.add(post); building3D.push(post);
-          });
-        });
       }
     }
 
@@ -1783,14 +1876,16 @@ planCanvas.addEventListener('mousedown', e => {
   }
 
   if (state.tool === 'select') {
-    const hit = hitTest(sx, sy);
-    if (hit) {
-      // click on object: select and allow drag
-      state.selected = hit.id;
+    const hits = hitTestAll(sx, sy);
+    if (hits.length > 0) {
+      // Cycle through stacked objects on repeated clicks
+      const curIdx = hits.findIndex(o => o.id === state.selected);
+      const nextHit = hits[(curIdx + 1) % hits.length];
+      state.selected = nextHit.id;
       state.dragging = true;
       state.dragStartX = sx; state.dragStartY = sy;
-      state.dragObjX = hit.x; state.dragObjY = hit.y;
-      showPropsPanel(hit);
+      state.dragObjX = nextHit.x; state.dragObjY = nextHit.y;
+      showPropsPanel(nextHit);
       draw2D();
     } else {
       // click on empty: start pan
@@ -1886,7 +1981,7 @@ planCanvas.addEventListener('wheel', e => {
   e.preventDefault();
   const { sx, sy } = getCanvasPos(e);
   const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
-  const newZoom = Math.max(0.3, Math.min(4, state.zoom * zoomFactor));
+  const newZoom = Math.max(0.02, Math.min(4, state.zoom * zoomFactor));
   state.panX = sx - (sx - state.panX) * (newZoom / state.zoom);
   state.panY = sy - (sy - state.panY) * (newZoom / state.zoom);
   state.zoom = newZoom;
@@ -1950,23 +2045,29 @@ function getPlanAtScreenPos(sx, sy) {
 }
 
 function hitTest(sx, sy) {
+  const hits = hitTestAll(sx, sy);
+  return hits.length > 0 ? hits[0] : null;
+}
+
+function hitTestAll(sx, sy) {
   const yOff = planOriginY(state.currentPlan);
   const objs = objects();
+  const hits = [];
   for (let i = objs.length - 1; i >= 0; i--) {
     const obj = objs[i];
     if (obj.type === 'line') continue;
-    if (obj.type === 'line' || obj.type === 'curve') continue; // skip line types
+    if (obj.type === 'curve') continue;
     if (obj.type === 'circle') {
       const c = wts(obj.cx != null ? obj.cx : (obj.x + obj.r), obj.cy != null ? obj.cy : (obj.y + obj.r), yOff);
-      if (Math.hypot(sx - c.x, sy - c.y) <= (obj.r || 10) * state.zoom) return obj;
+      if (Math.hypot(sx - c.x, sy - c.y) <= (obj.r || 10) * state.zoom) hits.push(obj);
     } else if (obj.x != null) {
       const s = wts(obj.x, obj.y, yOff);
       const sw = (obj.w || 10) * state.zoom;
       const sh = (obj.h || 10) * state.zoom;
-      if (sx >= s.x && sx <= s.x + sw && sy >= s.y && sy <= s.y + sh) return obj;
+      if (sx >= s.x && sx <= s.x + sw && sy >= s.y && sy <= s.y + sh) hits.push(obj);
     }
   }
-  return null;
+  return hits;
 }
 
 // ═══════════════════════════════════════════════════════
