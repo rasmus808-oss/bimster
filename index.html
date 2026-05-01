@@ -364,6 +364,27 @@
   }
   .ctx-num::-webkit-inner-spin-button, .ctx-num::-webkit-outer-spin-button { -webkit-appearance: none; }
   .ctx-num:focus { border-color: var(--blue); background: #fff; }
+  .ctx-stepper { display:flex; align-items:center; gap:0; }
+  .ctx-step-btn {
+    width: 20px; height: 26px; border: 1px solid var(--border2); background: var(--bg);
+    color: var(--text); font-size: 14px; line-height: 1; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    user-select: none; flex-shrink: 0;
+  }
+  .ctx-step-btn:hover { background: var(--bg2); }
+  .ctx-step-btn:active { background: var(--border2); }
+  .ctx-step-btn.minus { border-radius: 5px 0 0 5px; border-right: none; }
+  .ctx-step-btn.plus  { border-radius: 0 5px 5px 0; border-left: none; }
+  .ctx-step-val {
+    width: 36px; height: 26px; border: 1px solid var(--border2);
+    font-size: 13px; font-family: var(--mono); background: var(--bg);
+    color: var(--text); text-align: center; outline: none;
+    -moz-appearance: textfield; padding: 0;
+    display: flex; align-items: center; justify-content: center;
+    box-sizing: border-box;
+  }
+  .ctx-step-val::-webkit-inner-spin-button, .ctx-step-val::-webkit-outer-spin-button { -webkit-appearance: none; }
+  .ctx-step-val:focus { border-color: var(--blue); background: #fff; }
   .ctx-unit { font-size: 10px; color: var(--text3); margin-left: 1px; }
   .ctx-readout {
     font-size: 13px; font-family: var(--mono); color: var(--text2);
@@ -428,6 +449,7 @@
   }
   #multi-popup button:hover { background: #fdd; }
 </style>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 </head>
 <body>
 
@@ -449,6 +471,9 @@
   </div>
   <div class="status-dot active" id="status-dot"></div>
   <div class="spacer"></div>
+  <button class="top-btn" onclick="saveProject()" title="Save project as JSON file">↓ Save</button>
+  <button class="top-btn" onclick="loadProjectDialog()" title="Load project from JSON file">↑ Load</button>
+  <input type="file" id="load-file-input" accept=".json" style="display:none" onchange="loadProjectFile(this)">
 </div>
 
 <!-- PLAN DROPDOWN -->
@@ -479,6 +504,17 @@
   <div id="divider"></div>
   <div id="viewport">
     <canvas id="three-canvas"></canvas>
+    <!-- Saved views panel — top-left of 3D pane -->
+    <div id="saved-views-panel" style="
+      position:absolute; top:8px; left:8px; z-index:30;
+      display:flex; flex-direction:column; gap:4px; max-width:120px;
+    ">
+      <button class="vpbtn" onclick="saveCurrentView()" style="font-size:10px;padding:3px 7px;white-space:nowrap">
+        + Save View
+      </button>
+      <div id="saved-views-list" style="display:flex;flex-direction:column;gap:3px;"></div>
+    </div>
+
     <div class="vp-label">3D View</div>
 
     <!-- 3D controls — bottom-right of 3D pane -->
@@ -486,6 +522,10 @@
       <button class="vpbtn" onclick="zoomExtents()">⊡ Fit</button>
       <button class="vpbtn active" id="vbtn-persp" onclick="setVPMode('persp')">Persp</button>
       <button class="vpbtn" id="vbtn-ortho" onclick="setVPMode('ortho')">Ortho</button>
+      <span style="width:1px;height:12px;background:rgba(0,0,0,0.15);margin:0 2px"></span>
+      <button class="vpbtn" id="vbtn-top"   onclick="setViewPreset('top')">Top</button>
+      <button class="vpbtn" id="vbtn-front" onclick="setViewPreset('front')">Front</button>
+      <button class="vpbtn" id="vbtn-right" onclick="setViewPreset('right')">Right</button>
     </div>
 
     <div id="module-panel">
@@ -494,14 +534,76 @@
   </div>
 </div>
 
+<!-- CONTEXT / GEOLOCATION PANEL -->
+<div id="context-panel" style="
+  display:none; position:fixed; right:16px; bottom:60px; width:420px;
+  background:var(--bg); border:1px solid var(--border2); border-radius:10px;
+  box-shadow:0 8px 32px rgba(0,0,0,0.22); z-index:200; padding:0;
+  font-family:var(--sans); font-size:12px; color:var(--text); overflow:hidden;
+">
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px 8px;border-bottom:1px solid var(--border2)">
+    <span style="font-weight:600;font-size:13px">Site Context — OSM Import</span>
+    <button onclick="document.getElementById('context-panel').style.display='none'"
+      style="background:none;border:none;cursor:pointer;font-size:18px;color:var(--text3);line-height:1">×</button>
+  </div>
+
+  <!-- Map preview -->
+  <div style="position:relative;height:240px;background:#e8e4dc;">
+    <div id="ctx-map" style="width:100%;height:100%;"></div>
+    <div id="ctx-map-hint" style="position:absolute;bottom:6px;left:0;right:0;text-align:center;
+      font-size:10px;color:rgba(0,0,0,0.5);pointer-events:none;font-family:var(--mono)">
+      Pan &amp; zoom the map, then draw a rectangle to select import area
+    </div>
+  </div>
+
+  <div style="padding:10px 14px;">
+    <div style="display:flex;gap:6px;margin-bottom:8px">
+      <input id="ctx-location-input" placeholder="Address or lat,lon"
+        style="flex:1;padding:6px 8px;border:1px solid var(--border2);border-radius:5px;
+               font-size:11px;font-family:var(--mono);background:var(--bg);color:var(--text)"
+        onkeydown="if(event.key==='Enter')geocodeLocation()">
+      <button onclick="geocodeLocation()"
+        style="padding:6px 10px;background:var(--blue,#2a6dd4);color:#fff;border:none;
+               border-radius:5px;cursor:pointer;font-size:11px;white-space:nowrap">Go</button>
+      <button onclick="useMyLocation()"
+        style="padding:6px 8px;background:var(--bg2);border:1px solid var(--border2);
+               border-radius:5px;cursor:pointer;font-size:11px" title="Use my location">📍</button>
+    </div>
+
+    <div style="display:flex;gap:6px;margin-bottom:8px">
+      <button id="ctx-draw-btn" onclick="startRectDraw()"
+        style="flex:1;padding:6px;background:var(--bg2);border:1px solid var(--border2);
+               border-radius:5px;cursor:pointer;font-size:11px;font-weight:500">
+        ⬚ Draw Selection Rectangle
+      </button>
+      <button onclick="clearContextBuildings();setCtxStatus('Cleared.')"
+        style="padding:6px 10px;background:var(--bg2);border:1px solid var(--border2);
+               border-radius:5px;cursor:pointer;font-size:11px">Clear 3D</button>
+    </div>
+
+    <div id="ctx-status" style="font-size:10px;color:var(--text3);min-height:14px;margin-bottom:6px"></div>
+
+    <button id="ctx-import-btn" onclick="importSelectedArea()" disabled
+      style="width:100%;padding:7px;background:#aaa;color:#fff;border:none;border-radius:5px;
+             cursor:not-allowed;font-size:12px;font-weight:500">
+      Import Buildings to 3D
+    </button>
+
+    <div style="margin-top:8px;font-size:9px;color:var(--text3);line-height:1.5">
+      Data: © <a href="https://openstreetmap.org" target="_blank" style="color:var(--blue)">OpenStreetMap</a> contributors · ODbL
+    </div>
+  </div>
+</div>
+
 <!-- BOTTOM TOOLBAR (left) -->
 <!-- FURNITURE PICKER -->
 <div id="furniture-picker">
   <div class="furn-cats">
-    <button class="furn-cat-btn active" onclick="setFurnCat('seating')">Seating</button>
-    <button class="furn-cat-btn" onclick="setFurnCat('tables')">Tables</button>
-    <button class="furn-cat-btn" onclick="setFurnCat('beds')">Beds</button>
-    <button class="furn-cat-btn" onclick="setFurnCat('plants')">Plants</button>
+    <button class="furn-cat-btn active" onclick="setFurnCat('groups')"   data-cat="groups">Groups</button>
+    <button class="furn-cat-btn" onclick="setFurnCat('seating')"  data-cat="seating">Seating</button>
+    <button class="furn-cat-btn" onclick="setFurnCat('tables')"   data-cat="tables">Tables</button>
+    <button class="furn-cat-btn" onclick="setFurnCat('beds')"     data-cat="beds">Beds</button>
+    <button class="furn-cat-btn" onclick="setFurnCat('plants')"   data-cat="plants">Plants</button>
   </div>
   <div class="furn-grid" id="furn-grid"></div>
 </div>
@@ -560,10 +662,6 @@
 <div id="toolbar-right">
   <!-- 3D viewport controls, same height as left toolbar -->
   <div style="display:flex;align-items:center;gap:4px;margin-right:8px">
-    <button class="tbtn" onclick="zoomExtents()" title="Fit 3D">
-      <svg viewBox="0 0 15 15" fill="none"><rect x="2" y="2" width="4" height="4" stroke="currentColor" stroke-width="1.2"/><rect x="9" y="2" width="4" height="4" stroke="currentColor" stroke-width="1.2"/><rect x="2" y="9" width="4" height="4" stroke="currentColor" stroke-width="1.2"/><rect x="9" y="9" width="4" height="4" stroke="currentColor" stroke-width="1.2"/></svg>
-    </button>
-    <div class="tsep"></div>
     <button class="tbtn" id="vbtn-persp" onclick="setVPMode('persp')" title="Perspective">
       <svg viewBox="0 0 15 15" fill="none"><path d="M2 13L4 2h7l2 11H2z" stroke="currentColor" stroke-width="1.1"/><path d="M1 13h13" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>
     </button>
@@ -571,11 +669,10 @@
       <svg viewBox="0 0 15 15" fill="none"><rect x="2" y="2" width="11" height="11" stroke="currentColor" stroke-width="1.1"/><path d="M2 2l3 3M13 2l-3 3M2 13l3-3M13 13l-3-3" stroke="currentColor" stroke-width="1" stroke-linecap="round"/></svg>
     </button>
   </div>
-  <button class="chat-btn" onclick="openChat()">
-    <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M1 1h11v8H7.5L5 12V9H1z" stroke="currentColor" stroke-width="1.1" stroke-linejoin="round" fill="none"/></svg>
-    Chat
+  <button class="top-btn" onclick="openContextPanel()">
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style="vertical-align:-1px"><circle cx="6" cy="6" r="5" stroke="currentColor" stroke-width="1.1"/><path d="M6 3v3l2 1.5" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>
+    Context ▾
   </button>
-  <button class="top-btn" onclick="cycleViewMode()">View ▾</button>
   <button class="top-btn render-btn" onclick="triggerRender()">Render ▾</button>
 </div>
 
@@ -671,7 +768,11 @@
   <div class="ctx-group" id="grp-floors">
     <div class="ctx-field">
       <span class="ctx-lbl">Floors</span>
-      <input class="ctx-num" id="prop-stories" type="number" step="1" min="1" max="99" oninput="applyPropLive('floors',this)" style="width:46px">
+      <div class="ctx-stepper">
+        <button class="ctx-step-btn minus" onclick="stepFloors(-1)">−</button>
+        <input class="ctx-step-val" id="prop-stories" type="number" step="1" min="1" max="99" oninput="applyPropLive('floors',this)">
+        <button class="ctx-step-btn plus" onclick="stepFloors(1)">+</button>
+      </div>
     </div>
     <div class="ctx-field">
       <span class="ctx-lbl">Flr H</span>
@@ -690,6 +791,7 @@
     </div>
     <div id="ctx-color-dropdown"></div>
   </div>
+  <button class="ctx-del" onclick="rotateSelected(90)" title="Rotate 90° (E)" style="font-size:13px;margin-right:2px">↻</button>
   <button class="ctx-del" onclick="deleteSel()" title="Delete">✕</button>
 </div>
 
@@ -755,7 +857,8 @@ let state = {
   objIdCounter: 0,
   viewMode: 'persp',
   modules: [],
-  renderMode: false
+  renderMode: false,
+  savedViews: [],  // [{name, theta, phi, dist, target:{x,y,z}}]
 };
 let multiSelected = [];
 
@@ -873,12 +976,9 @@ function draw2D() {
     // Show floor elevation hint
     if (idx > 0 && state.zoom > 0.4) {
       const elev = (() => {
-        let e = 0;
-        for (let i = 0; i < idx; i++) {
-          const rep = state.plans[i].objects.find(o => o.type === 'mass' || o.type === 'grid');
-          e += (rep ? (rep.floors || 4) : 4) * (rep ? (rep.floorH || 3.2) : 3.2);
-        }
-        return e.toFixed(1);
+        const r = state.plans[0].objects.find(o => ['mass','wall','grid'].includes(o.type));
+        const fh = r ? (r.floorH || 3.2) : 3.2;
+        return (idx * fh).toFixed(1);
       })();
       ctx2.fillStyle = isActive ? 'rgba(74,127,200,0.7)' : 'rgba(74,127,200,0.3)';
       ctx2.fillText('+' + elev + 'm', bs.x + pw - 50 * state.zoom, bs.y - 7);
@@ -886,23 +986,28 @@ function draw2D() {
 
     // Upper plans: section cut through Plan 01 objects at 1.2m above this floor's elevation
     if (idx > 0) {
-      // Compute this floor's base elevation by summing floors*floorH of all plans below
-      let elevM = 0;
-      for (let i = 0; i < idx; i++) {
-        const rep = state.plans[i].objects.find(o => ['mass','grid','slab','wall','stair'].includes(o.type));
-        elevM += (rep ? (rep.floors || 4) : 4) * (rep ? (rep.floorH || 3.2) : 3.2);
-      }
-      const cutM = elevM + 1.2; // standard 1.2m section cut height above floor
+      // Each plan sheet = one storey. Find representative floorH from Plan 0.
+      const rep0 = state.plans[0].objects.find(o => ['mass','wall','grid','stair'].includes(o.type));
+      const storyH = rep0 ? (rep0.floorH || 3.2) : 3.2;
+      // Plan idx cuts at (idx * storyH) + 1.2m above ground
+      const cutM = idx * storyH + 1.2;
 
       ctx2.save();
       state.plans[0].objects.forEach(obj => {
         const fl = obj.floors || 1;
         const fh = obj.floorH || 3.2;
-        let topM = 0;
-        if (['mass','wall','grid','stair'].includes(obj.type)) topM = fl * fh;
-        else if (obj.type === 'slab') topM = (fl - 1) * fh + 0.3;
-        else topM = cutM + 1; // non-volumetric: always show
-        if (cutM <= topM) drawSectionCut(obj, idx);
+        let visible = false;
+        if (['mass','wall','grid','stair'].includes(obj.type)) {
+          // Solid element: visible if cut is within its vertical extent
+          visible = cutM <= fl * fh;
+        } else if (obj.type === 'slab') {
+          // Slab has panels at each floor level — visible if this floor index has a panel
+          visible = idx < fl;
+        } else {
+          // Furniture, labels etc — always show if they exist on this floor
+          visible = idx < fl;
+        }
+        if (visible) drawSectionCut(obj, idx);
       });
       ctx2.restore();
     }
@@ -1000,6 +1105,8 @@ function drawObject2D(obj, planIdx) {
     drawLabel2D(obj, sel, yOff);
   } else if (obj.type === 'furniture') {
     drawFurniture(obj, sel, yOff);
+  } else if (obj.type === 'furnitureGroup') {
+    drawFurnitureGroup(obj, sel, yOff);
   }
   ctx2.restore();
 }
@@ -1032,7 +1139,18 @@ function drawSectionCut(obj, planIdx) {
     return;
   }
 
-  if (!obj.x == null || !obj.w) { ctx2.restore(); return; }
+  // Furniture: draw top-view icon at the plan sheet position
+  if (obj.type === 'furniture') {
+    const sf = wts(obj.x, obj.y, yOff);
+    const sfw = obj.w * state.zoom, sfh = obj.h * state.zoom;
+    ctx2.globalAlpha = 0.65;
+    drawFurnTopView(ctx2, obj.kind || 'desk', sf.x, sf.y, sfw, sfh, obj.color || '#e8e5dc');
+    ctx2.globalAlpha = 1;
+    ctx2.restore();
+    return;
+  }
+
+  if (obj.x == null || !obj.w) { ctx2.restore(); return; }
 
   const s = wts(obj.x, obj.y, yOff);
   const sw = obj.w * state.zoom, sh = obj.h * state.zoom;
@@ -1253,26 +1371,91 @@ function drawLabel2D(obj, sel, yOff=0) {
 function drawFurniture(obj, sel, yOff=0) {
   const s = wts(obj.x, obj.y, yOff);
   const sw = obj.w * state.zoom, sh = obj.h * state.zoom;
+  if (sw < 1 || sh < 1) return;
   ctx2.save();
-  ctx2.globalAlpha = 0.85;
-  ctx2.fillStyle = sel ? 'rgba(74,127,200,0.12)' : 'rgba(0,0,0,0.04)';
-  ctx2.strokeStyle = sel ? '#4a7fc8' : 'rgba(0,0,0,0.3)';
-  ctx2.lineWidth = sel ? 1.5 : 1;
-  ctx2.beginPath(); ctx2.roundRect(s.x, s.y, sw, sh, 2); ctx2.fill(); ctx2.stroke();
-  // emoji label centered
-  const fs = Math.max(10, Math.min(sw, sh) * 0.5);
-  ctx2.globalAlpha = 0.7;
-  ctx2.font = fs + 'px serif';
-  ctx2.textAlign = 'center'; ctx2.textBaseline = 'middle';
-  ctx2.fillText(obj.emoji || '📦', s.x + sw/2, s.y + sh/2);
-  ctx2.globalAlpha = 1;
-  if (obj.label && state.zoom > 0.5) {
+  ctx2.globalAlpha = sel ? 1.0 : 0.88;
+
+  const rot = (obj.rotation || 0) * Math.PI / 180;
+  if (rot) {
+    // Rotate around centre of object
+    const cx = s.x + sw / 2, cy = s.y + sh / 2;
+    ctx2.translate(cx, cy);
+    ctx2.rotate(rot);
+    ctx2.translate(-sw / 2, -sh / 2);
+    drawFurnTopView(ctx2, obj.kind || 'desk', 0, 0, sw, sh, obj.color || '#e8e5dc');
+    if (sel) {
+      ctx2.strokeStyle = '#2a6dd4';
+      ctx2.lineWidth = 1.5;
+      ctx2.strokeRect(-1, -1, sw + 2, sh + 2);
+      // Small rotation indicator dot at top-centre
+      ctx2.fillStyle = '#2a6dd4';
+      ctx2.beginPath(); ctx2.arc(sw/2, -8, 3, 0, Math.PI*2); ctx2.fill();
+    }
+  } else {
+    drawFurnTopView(ctx2, obj.kind || 'desk', s.x, s.y, sw, sh, obj.color || '#e8e5dc');
+    if (sel) {
+      ctx2.strokeStyle = '#2a6dd4';
+      ctx2.lineWidth = 1.5;
+      ctx2.strokeRect(s.x - 1, s.y - 1, sw + 2, sh + 2);
+    }
+  }
+
+  if (obj.label && state.zoom > 0.5 && !rot) {
     ctx2.font = `${Math.max(8, 9 * state.zoom)}px DM Mono, monospace`;
     ctx2.fillStyle = 'rgba(0,0,0,0.3)';
     ctx2.textAlign = 'center'; ctx2.textBaseline = 'top';
     ctx2.fillText(obj.label, s.x + sw/2, s.y + sh + 2);
   }
   ctx2.restore();
+  // No resize handles for furniture — move by drag, rotate with E
+}
+
+function drawFurnitureGroup(obj, sel, yOff=0) {
+  if (!obj.pieces || !obj.pieces.length) return;
+  const s = wts(obj.x, obj.y, yOff); // obj.x/y = group anchor (top-left of bounding box)
+  const sw = obj.w * state.zoom, sh = obj.h * state.zoom;
+  if (sw < 1 || sh < 1) return;
+  ctx2.save();
+  ctx2.globalAlpha = sel ? 1.0 : 0.88;
+
+  const rot = (obj.rotation || 0) * Math.PI / 180;
+  const gcx = s.x + sw/2, gcy = s.y + sh/2;
+
+  if (rot) {
+    ctx2.translate(gcx, gcy);
+    ctx2.rotate(rot);
+    ctx2.translate(-sw/2, -sh/2);
+  } else {
+    ctx2.translate(s.x, s.y);
+  }
+
+  // Draw each piece in local group coordinates
+  obj.pieces.forEach(p => {
+    // piece coords are offsets from group centre in world-px
+    const px = sw/2 + p.dx * state.zoom - p.pw * state.zoom / 2;
+    const py = sh/2 + p.dy * state.zoom - p.ph * state.zoom / 2;
+    const ppw = p.pw * state.zoom, pph = p.ph * state.zoom;
+    ctx2.save();
+    if (p.rot) {
+      ctx2.translate(px + ppw/2, py + pph/2);
+      ctx2.rotate(p.rot * Math.PI / 180);
+      ctx2.translate(-ppw/2, -pph/2);
+      drawFurnTopView(ctx2, p.kind, 0, 0, ppw, pph, '#e8e5dc');
+    } else {
+      drawFurnTopView(ctx2, p.kind, px, py, ppw, pph, '#e8e5dc');
+    }
+    ctx2.restore();
+  });
+
+  if (sel) {
+    ctx2.strokeStyle = '#2a6dd4';
+    ctx2.lineWidth = 1.5;
+    ctx2.setLineDash([4, 3]);
+    ctx2.strokeRect(0, 0, sw, sh);
+    ctx2.setLineDash([]);
+  }
+  ctx2.restore();
+  // Groups: show resize handles so they can be moved/scaled
   if (sel) drawHandles(s.x, s.y, sw, sh);
 }
 
@@ -1495,6 +1678,7 @@ threeScene.add(grid3D);
 let building3D = [];
 
 function rebuild3D() {
+  if (typeof scheduleAutosave === 'function') scheduleAutosave();
   building3D.forEach(m => threeScene.remove(m));
   building3D = [];
 
@@ -1502,9 +1686,23 @@ function rebuild3D() {
   const CX = PLAN_W / 2;  // half of PLAN_W — horizontal centre
   const CZ = PLAN_H / 2;  // half of PLAN_H — depth centre
 
-  // Only render Plan 01 objects in 3D.
-  // "floors" on each object = total storeys → drives building height.
+  // Render all plans in 3D. Upper plans render at their floor elevation.
+  // Compute cumulative floor elevations per plan index.
+  function planBaseElevation(planIdx) {
+    let elev = 0;
+    for (let i = 0; i < planIdx; i++) {
+      const rep = state.plans[i].objects.find(o => ['mass','wall','grid','stair'].includes(o.type));
+      elev += (rep ? (rep.floors || 4) : 4) * (rep ? (rep.floorH || 3.2) : 3.2);
+    }
+    return elev;
+  }
+
+  // Only Plan 01 objects drive the primary massing — upper plans add furnishings/details
   const objs = state.plans[0].objects;
+  // Collect all plan objects with their elevation offsets for furniture/slabs on upper floors
+  const allPlanObjs = state.plans.flatMap((p, pidx) =>
+    pidx === 0 ? [] : p.objects.map(o => ({ obj: o, elevOffset: planBaseElevation(pidx) }))
+  );
 
   objs.forEach(obj => {
 
@@ -1553,8 +1751,10 @@ function rebuild3D() {
 
       for (let f = 0; f < floors; f++) {
         const slabY = f * fh + 0.15;
+        // Hole only on intermediate floors (not ground f=0, not roof f=floors-1)
+        const punchHole = stairs.length > 0 && f > 0 && f < floors - 1;
 
-        if (stairs.length === 0) {
+        if (!punchHole) {
           const cx = (obj.x + obj.w / 2 - CX) * SC;
           const cz = (obj.y + obj.h / 2 - CZ) * SC;
           const slab = new THREE.Mesh(new THREE.BoxGeometry(obj.w * SC, 0.3, obj.h * SC), mat);
@@ -1562,21 +1762,37 @@ function rebuild3D() {
           slab.receiveShadow = true;
           threeScene.add(slab); building3D.push(slab);
         } else {
-          // Split slab into strips around the first stair hole
-          const st = stairs[0];
-          const hx0 = Math.max(obj.x, st.x);
-          const hx1 = Math.min(obj.x + obj.w, st.x + st.w);
-          const hy0 = Math.max(obj.y, st.y);
-          const hy1 = Math.min(obj.y + obj.h, st.y + st.h);
-          const rects = [];
-          if (hy0 > obj.y)          rects.push({ x: obj.x, y: obj.y, w: obj.w,      h: hy0 - obj.y });
-          if (hy1 < obj.y + obj.h)  rects.push({ x: obj.x, y: hy1,   w: obj.w,      h: obj.y + obj.h - hy1 });
-          if (hx0 > obj.x)          rects.push({ x: obj.x, y: hy0,   w: hx0 - obj.x, h: hy1 - hy0 });
-          if (hx1 < obj.x + obj.w)  rects.push({ x: hx1,   y: hy0,   w: obj.x + obj.w - hx1, h: hy1 - hy0 });
+          // Iteratively subtract each stair footprint from the remaining slab rects
+          // subtractRect(rects, hole) splits every rect that overlaps the hole into up to 4 pieces
+          function subtractRect(rects, st) {
+            const hx0 = Math.max(0, st.x - obj.x);
+            const hx1 = Math.min(obj.w, st.x + st.w - obj.x);
+            const hy0 = Math.max(0, st.y - obj.y);
+            const hy1 = Math.min(obj.h, st.y + st.h - obj.y);
+            if (hx0 >= hx1 || hy0 >= hy1) return rects; // no real overlap
+            const out = [];
+            rects.forEach(r => {
+              // Clip hole to this rect
+              const cx0 = Math.max(r.x, hx0), cx1 = Math.min(r.x + r.w, hx1);
+              const cy0 = Math.max(r.y, hy0), cy1 = Math.min(r.y + r.h, hy1);
+              if (cx0 >= cx1 || cy0 >= cy1) { out.push(r); return; } // no overlap with this rect
+              // Split into up to 4 surrounding pieces
+              if (cy0 > r.y)             out.push({ x: r.x,  y: r.y,  w: r.w,       h: cy0 - r.y });
+              if (cy1 < r.y + r.h)       out.push({ x: r.x,  y: cy1,  w: r.w,       h: r.y + r.h - cy1 });
+              if (cx0 > r.x)             out.push({ x: r.x,  y: cy0,  w: cx0 - r.x, h: cy1 - cy0 });
+              if (cx1 < r.x + r.w)       out.push({ x: cx1,  y: cy0,  w: r.x + r.w - cx1, h: cy1 - cy0 });
+            });
+            return out;
+          }
+
+          // Start with slab in local coords (origin at obj.x, obj.y)
+          let rects = [{ x: 0, y: 0, w: obj.w, h: obj.h }];
+          stairs.forEach(st => { rects = subtractRect(rects, st); });
+
           rects.forEach(r => {
             if (r.w <= 0 || r.h <= 0) return;
-            const rcx = (r.x + r.w / 2 - CX) * SC;
-            const rcz = (r.y + r.h / 2 - CZ) * SC;
+            const rcx = (obj.x + r.x + r.w / 2 - CX) * SC;
+            const rcz = (obj.y + r.y + r.h / 2 - CZ) * SC;
             const piece = new THREE.Mesh(new THREE.BoxGeometry(r.w * SC, 0.3, r.h * SC), mat);
             piece.position.set(rcx, slabY, rcz);
             piece.receiveShadow = true;
@@ -1657,7 +1873,7 @@ function rebuild3D() {
     // ── STAIR ──
     // ── STAIR — straight single flight ──
     if (obj.type === 'stair') {
-      const floors = obj.floors || 1;
+      const floors = obj.floors || 4;
       const fh     = obj.floorH || 3.2;
       const stairW = obj.w * SC;
       const stairD = obj.h * SC;
@@ -1686,8 +1902,322 @@ function rebuild3D() {
       }
     }
 
+    // ── FURNITURE GROUP ──
+    if (obj.type === 'furnitureGroup' && obj.pieces) {
+      const gcx = (obj.x + obj.w/2 - CX) * SC;
+      const gcz = (obj.y + obj.h/2 - CZ) * SC;
+      const grpGroup = new THREE.Group();
+      grpGroup.position.set(gcx, 0, gcz);
+      grpGroup.rotation.y = -((obj.rotation || 0) * Math.PI / 180);
+      threeScene.add(grpGroup); building3D.push(grpGroup);
+
+      obj.pieces.forEach(p => {
+        const pw = p.pw * SC, pd = p.ph * SC;
+        const pcx = p.dx * SC; // local offset from group centre
+        const pcz = p.dy * SC;
+        const pCol = new THREE.Color('#e8e5dc');
+        const dark = new THREE.Color(0x5a4a38);
+
+        function pBox(w,h,d,col,ox=0,oy=0,oz=0) {
+          const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d),
+            new THREE.MeshStandardMaterial({color:col,roughness:0.8}));
+          m.position.set(pcx+ox, oy+h/2, pcz+oz);
+          if (p.rot) m.rotation.y = -p.rot * Math.PI / 180;
+          grpGroup.add(m);
+        }
+        function pCyl(r,h,col,ox=0,oy=0,oz=0) {
+          const m = new THREE.Mesh(new THREE.CylinderGeometry(r,r,h,12),
+            new THREE.MeshStandardMaterial({color:col,roughness:0.8}));
+          m.position.set(pcx+ox, oy+h/2, pcz+oz);
+          grpGroup.add(m);
+        }
+
+        const k = p.kind;
+        if (k === 'chair') {
+          pBox(pw,0.05,pd*0.7,pCol,0,0.45,pd*0.1);
+          pBox(pw,0.5,0.05,pCol,0,0.45,-pd*0.35+0.025);
+          [[-pw/2+0.05,pd*0.35-0.05],[pw/2-0.05,pd*0.35-0.05],
+           [-pw/2+0.05,-pd*0.35+0.05],[pw/2-0.05,-pd*0.35+0.05]].forEach(([ox,oz])=>pCyl(0.02,0.45,dark,ox,0,oz));
+        } else if (k === 'stool') {
+          pCyl(pw/2*0.85,0.04,pCol,0,0.46,0);
+          pCyl(0.025,0.46,dark,0,0,0);
+        } else if (k === 'desk' || k === 'counter') {
+          pBox(pw,0.04,pd,pCol,0,0.74,0);
+          [[-pw/2+0.04,pd/2-0.04],[pw/2-0.04,pd/2-0.04],[-pw/2+0.04,-pd/2+0.04],[pw/2-0.04,-pd/2+0.04]].forEach(([ox,oz])=>pCyl(0.025,0.74,dark,ox,0,oz));
+        } else if (k === 'table4' || k === 'table6') {
+          pBox(pw*0.9,0.04,pd*0.9,pCol,0,0.74,0);
+          [[-pw/2+0.07,pd/2-0.07],[pw/2-0.07,pd/2-0.07],[-pw/2+0.07,-pd/2+0.07],[pw/2-0.07,-pd/2+0.07]].forEach(([ox,oz])=>pCyl(0.03,0.74,dark,ox,0,oz));
+        } else if (k === 'tableRnd') {
+          pCyl(pw/2*0.85,0.04,pCol,0,0.74,0);
+          pCyl(0.04,0.74,dark,0,0,0);
+        } else if (k === 'sofa2' || k === 'sofa3') {
+          pBox(pw,0.06,pd*0.65,pCol,0,0.42,pd*0.07);
+          pBox(pw,0.55,0.1,pCol,0,0.42,-pd*0.32);
+          pBox(0.08,0.28,pd,pCol,-pw/2+0.04,0.38,0);
+          pBox(0.08,0.28,pd,pCol, pw/2-0.04,0.38,0);
+        } else if (k === 'armchair') {
+          pBox(pw,0.06,pd*0.6,pCol,0,0.42,pd*0.05);
+          pBox(pw,0.5,0.08,pCol,0,0.42,-pd*0.3+0.04);
+          pBox(0.08,0.22,pd*0.85,pCol,-pw/2+0.04,0.42,0);
+          pBox(0.08,0.22,pd*0.85,pCol, pw/2-0.04,0.42,0);
+        } else if (k === 'bedSgl' || k === 'bedDbl' || k === 'bedKng') {
+          pBox(pw,0.22,pd*0.82,pCol,0,0,pd*0.08);
+          pBox(pw,0.38,pd*0.12,dark,0,0,-pd*0.45);
+        } else {
+          pBox(pw,0.8,pd,pCol);
+        }
+      });
+    }
+
+    // ── FURNITURE ──
+    if (obj.type === 'furniture') {
+      const fw = obj.w * SC, fd = obj.h * SC;
+      const fcx = (obj.x + obj.w/2 - CX) * SC;
+      const fcz = (obj.y + obj.h/2 - CZ) * SC;
+      const fCol = new THREE.Color(obj.color || '#e8e5dc');
+      const darkCol = new THREE.Color(0x5a4a38);
+      const k = obj.kind || 'desk';
+
+      // Use a Group so rotation applies to all pieces together
+      const furnGroup = new THREE.Group();
+      furnGroup.position.set(fcx, 0, fcz);
+      furnGroup.rotation.y = -((obj.rotation || 0) * Math.PI / 180);
+      threeScene.add(furnGroup);
+      building3D.push(furnGroup);
+
+      function fMat(col, rough=0.8) {
+        return new THREE.MeshStandardMaterial({ color: col, roughness: rough });
+      }
+      function fBox(w,h,d, col, ox=0,oy=0,oz=0) {
+        const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), fMat(col));
+        m.position.set(ox, oy+h/2, oz);
+        m.receiveShadow = true; m.castShadow = true;
+        furnGroup.add(m);
+      }
+      function fCyl(r,h,col,ox=0,oy=0,oz=0) {
+        const m = new THREE.Mesh(new THREE.CylinderGeometry(r,r,h,16), fMat(col));
+        m.position.set(ox, oy+h/2, oz);
+        m.receiveShadow = true;
+        furnGroup.add(m);
+      }
+
+      if (k === 'chair') {
+        // Seat
+        fBox(fw, 0.05, fd*0.7, fCol, 0, 0.45, fd*0.1);
+        // Back
+        fBox(fw, 0.5, 0.05, fCol, 0, 0.45, -fd*0.35+0.025);
+        // 4 legs
+        const lh=0.45, lr=0.02;
+        [[-fw/2+0.05,fd*0.35-0.05],[fw/2-0.05,fd*0.35-0.05],
+         [-fw/2+0.05,-fd*0.35+0.05],[fw/2-0.05,-fd*0.35+0.05]].forEach(([ox,oz])=>
+          fCyl(lr,lh,darkCol,ox,0,oz));
+      } else if (k === 'stool') {
+        fCyl(fw/2*0.85, 0.04, fCol, 0, 0.46, 0);
+        fCyl(0.025, 0.46, darkCol, 0, 0, 0);
+      } else if (k === 'armchair') {
+        fBox(fw, 0.06, fd*0.6, fCol, 0, 0.42, fd*0.05); // seat
+        fBox(fw, 0.5, 0.08, fCol, 0, 0.42, -fd*0.3+0.04); // back
+        fBox(0.08, 0.22, fd*0.85, fCol, -fw/2+0.04, 0.42, 0); // left arm
+        fBox(0.08, 0.22, fd*0.85, fCol,  fw/2-0.04, 0.42, 0); // right arm
+      } else if (k === 'sofa2' || k === 'sofa3') {
+        fBox(fw, 0.06, fd*0.65, fCol, 0, 0.42, fd*0.07); // seat
+        fBox(fw, 0.55, 0.1, fCol, 0, 0.42, -fd*0.32); // back
+        fBox(0.08, 0.28, fd, fCol, -fw/2+0.04, 0.38, 0); // left arm
+        fBox(0.08, 0.28, fd, fCol,  fw/2-0.04, 0.38, 0); // right arm
+      } else if (k === 'desk' || k === 'counter') {
+        fBox(fw, 0.04, fd, fCol, 0, 0.74, 0); // top
+        [[-fw/2+0.04,0],[fw/2-0.04,0],[-fw/2+0.04,fd/2-0.04],[fw/2-0.04,fd/2-0.04]].forEach(([ox,oz])=>
+          fCyl(0.025,0.74,darkCol,ox,0,oz));
+      } else if (k === 'table4' || k === 'table6') {
+        fBox(fw*0.9, 0.04, fd*0.9, fCol, 0, 0.74, 0);
+        [[-fw/2+0.07,fd/2-0.07],[fw/2-0.07,fd/2-0.07],
+         [-fw/2+0.07,-fd/2+0.07],[fw/2-0.07,-fd/2+0.07]].forEach(([ox,oz])=>
+          fCyl(0.03,0.74,darkCol,ox,0,oz));
+      } else if (k === 'tableRnd') {
+        fCyl(fw/2*0.85, 0.04, fCol, 0, 0.74, 0);
+        fCyl(0.04, 0.74, darkCol, 0, 0, 0);
+      } else if (k === 'bedSgl' || k === 'bedDbl' || k === 'bedKng') {
+        fBox(fw, 0.22, fd*0.82, fCol, 0, 0, fd*0.08); // mattress
+        fBox(fw, 0.38, fd*0.12, darkCol, 0, 0, -fd*0.45); // headboard
+        fBox(fw*0.9, 0.06, fd*0.78, new THREE.Color(0xffffff), 0, 0.23, fd*0.08); // linen
+      } else if (k === 'bath') {
+        // Tub shell
+        fBox(fw, 0.55, fd, fCol, 0, 0, 0);
+        // Inner basin (recessed)
+        fBox(fw*0.8, 0.45, fd*0.75, new THREE.Color(0xd0e8f0), 0, 0.06, fd*0.04);
+      } else if (k === 'shower') {
+        // Base tray
+        fBox(fw, 0.06, fd, fCol, 0, 0, 0);
+        // Two glass walls (transparent)
+        const glassMat = new THREE.MeshStandardMaterial({color:0xd0eeff,transparent:true,opacity:0.25,roughness:0.05});
+        const g1 = new THREE.Mesh(new THREE.BoxGeometry(fw, 2.1, 0.02), glassMat);
+        g1.position.set(0, 1.05+0.06, fd/2);
+        furnGroup.add(g1);
+        const g2 = new THREE.Mesh(new THREE.BoxGeometry(0.02, 2.1, fd), glassMat);
+        g2.position.set(fw/2, 1.05+0.06, 0);
+        furnGroup.add(g2);
+      } else if (k === 'treeNaked') {
+        // 8m tall architectural model tree — white/grey, irregular organic branching
+        const treeH = 8.0;
+        const trunkH = treeH * 0.42;
+        const modelMat = new THREE.MeshStandardMaterial({
+          color: 0xd8d4cc, roughness: 0.9, metalness: 0.0
+        });
+
+        // Deterministic pseudo-random from seed (no Math.random — consistent per tree)
+        let _seed = (obj.x * 137 + obj.y * 251) | 0;
+        function rng() {
+          _seed = (_seed * 1664525 + 1013904223) & 0xffffffff;
+          return (_seed >>> 0) / 0xffffffff;
+        }
+
+        function addBranch3D(x, y, z, len, radius, dirX, dirY, dirZ, depth) {
+          if (depth === 0 || len < 0.06) return;
+          const geo = new THREE.CylinderGeometry(radius * 0.48, radius, len, 5);
+          const mesh = new THREE.Mesh(geo, modelMat);
+          mesh.position.set(x + dirX*len/2, y + dirY*len/2, z + dirZ*len/2);
+          const dir = new THREE.Vector3(dirX, dirY, dirZ).normalize();
+          mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), dir);
+          furnGroup.add(mesh);
+          const ex = x + dirX*len, ey = y + dirY*len, ez = z + dirZ*len;
+
+          // Vary: 2–4 children, irregular angles and lengths
+          const nChild = depth === 1 ? 2 + (rng() > 0.4 ? 1 : 0) : 2 + Math.floor(rng() * 2);
+          const baseSpread = 0.22 + (4 - depth) * 0.1 + rng() * 0.12; // 0.22–0.64 rad
+          const lenRatio = 0.52 + rng() * 0.14; // 0.52–0.66
+
+          for (let b = 0; b < nChild; b++) {
+            const angOffset = rng() * 0.6 - 0.3; // ±0.3 rad jitter
+            const ang = (b / nChild) * Math.PI * 2 + depth * 1.3 + angOffset;
+            const spreadJitter = baseSpread + rng() * 0.15 - 0.07;
+            const cdx = Math.sin(spreadJitter) * Math.cos(ang);
+            const cdz = Math.sin(spreadJitter) * Math.sin(ang);
+            const cdy = Math.cos(spreadJitter);
+            const ll = Math.sqrt(cdx*cdx+cdy*cdy+cdz*cdz);
+            const childLen = len * lenRatio * (0.88 + rng() * 0.24);
+            addBranch3D(ex, ey, ez, childLen, radius * 0.48, cdx/ll, cdy/ll, cdz/ll, depth-1);
+          }
+        }
+
+        // Trunk — slightly tapered, not perfectly straight (lean by a tiny offset)
+        const trunkGeo = new THREE.CylinderGeometry(0.035, 0.11, trunkH, 7);
+        const trunkMesh = new THREE.Mesh(trunkGeo, modelMat);
+        const leanX = (rng()-0.5)*0.08, leanZ = (rng()-0.5)*0.08;
+        trunkMesh.position.set(leanX, trunkH/2, leanZ);
+        furnGroup.add(trunkMesh);
+
+        // 4–6 primary branches from trunk top at irregular heights
+        const nMain = 4 + Math.floor(rng() * 3);
+        for (let b = 0; b < nMain; b++) {
+          const ang = (b / nMain) * Math.PI * 2 + rng() * 0.8;
+          const spread = 0.28 + rng() * 0.18; // 16–26° from vertical
+          const hOffset = (rng() - 0.3) * 0.4; // start slightly below/above trunk top
+          const dx = Math.sin(spread) * Math.cos(ang);
+          const dz = Math.sin(spread) * Math.sin(ang);
+          const dy = Math.cos(spread);
+          const ll = Math.sqrt(dx*dx+dy*dy+dz*dz);
+          const brLen = treeH * (0.24 + rng() * 0.10);
+          addBranch3D(leanX, trunkH + hOffset, leanZ, brLen, 0.05, dx/ll, dy/ll, dz/ll, 4);
+        }
+      } else if (k === 'treeRnd' || k === 'treeL' || k === 'plantS') {
+        const tr = Math.min(fw,fd)/2;
+        fCyl(0.03, 1.2, new THREE.Color(0x8b6914), 0, 0, 0); // trunk
+        fCyl(tr*0.85, tr*1.4, new THREE.Color(0x5a9e36), 0, 1.2, 0); // canopy
+      } else if (k === 'pot') {
+        fCyl(fw/2*0.7, 0.3, new THREE.Color(0xb47a40), 0, 0, 0);
+        fCyl(fw/2*0.5, 0.5, new THREE.Color(0x4a8c30), 0, 0.3, 0);
+      } else if (k === 'toilet') {
+        // Cistern box at back
+        fBox(fw, 0.35, fd*0.35, fCol, 0, 0.78, -fd*0.32);
+        // Bowl
+        fCyl(fw*0.42, 0.42, fCol, 0, 0.38, fd*0.1);
+        fCyl(fw*0.3, 0.06, new THREE.Color(0xfafafa), 0, 0.78, fd*0.1); // seat
+      } else if (k === 'sink') {
+        // Pedestal
+        fCyl(Math.min(fw,fd)*0.12, 0.72, new THREE.Color(0xd0d0d0), 0, 0, 0);
+        // Basin top slab
+        fBox(fw, 0.06, fd, fCol, 0, 0.72, 0);
+        // Inner basin recess
+        fBox(fw*0.75, 0.04, fd*0.7, new THREE.Color(0xb8d8e8), 0, 0.74, 0);
+      } else if (k === 'urinal') {
+        // Wall plate
+        fBox(fw, 0.52, 0.1, fCol, 0, 0.88, -fd*0.45);
+        // Bowl protrusion
+        fBox(fw*0.8, 0.38, fd*0.55, fCol, 0, 0.88, -fd*0.18);
+      } else {
+        // Generic box fallback
+        fBox(fw, 0.8, fd, fCol);
+      }
+    }
 
   }); // end objs.forEach
+
+  // ── UPPER PLAN OBJECTS at their floor elevation ──
+  allPlanObjs.forEach(({ obj, elevOffset }) => {
+    if (obj.type !== 'furniture' && obj.type !== 'slab' && obj.type !== 'mass') return;
+    const fw = obj.w * SC, fd = obj.h * SC;
+    const fcx = (obj.x + obj.w/2 - CX) * SC;
+    const fcz = (obj.y + obj.h/2 - CZ) * SC;
+    const fCol = new THREE.Color(obj.color || '#e8e5dc');
+    const darkCol = new THREE.Color(0x5a4a38);
+    const k = obj.kind || '';
+
+    function fMatU(col, rough=0.8) { return new THREE.MeshStandardMaterial({ color: col, roughness: rough }); }
+    function fBoxU(w,h,d,col,ox=0,oy=0,oz=0) {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), fMatU(col));
+      m.position.set(fcx+ox, elevOffset+oy+h/2, fcz+oz);
+      m.receiveShadow=true; m.castShadow=true;
+      threeScene.add(m); building3D.push(m);
+    }
+    function fCylU(r,h,col,ox=0,oy=0,oz=0) {
+      const m = new THREE.Mesh(new THREE.CylinderGeometry(r,r,h,12), fMatU(col));
+      m.position.set(fcx+ox, elevOffset+oy+h/2, fcz+oz);
+      threeScene.add(m); building3D.push(m);
+    }
+
+    if (obj.type === 'slab') {
+      const mat = new THREE.MeshStandardMaterial({ color: fCol, roughness: 0.85 });
+      const slab = new THREE.Mesh(new THREE.BoxGeometry(fw, 0.3, fd), mat);
+      slab.position.set(fcx, elevOffset + 0.15, fcz);
+      slab.receiveShadow = true;
+      threeScene.add(slab); building3D.push(slab);
+    } else if (obj.type === 'mass') {
+      const fh = obj.floorH || 3.2;
+      const mat = new THREE.MeshStandardMaterial({ color: fCol, roughness: 0.8, transparent: true, opacity: 0.6 });
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(fw, fh, fd), mat);
+      mesh.position.set(fcx, elevOffset + fh/2, fcz);
+      threeScene.add(mesh); building3D.push(mesh);
+    } else if (obj.type === 'furniture') {
+      // Reuse furniture rendering logic inline for upper floors
+      if (k === 'chair') {
+        fBoxU(fw, 0.05, fd*0.7, fCol, 0, 0.45, fd*0.1);
+        fBoxU(fw, 0.5, 0.05, fCol, 0, 0.45, -fd*0.35+0.025);
+      } else if (k === 'desk' || k === 'counter' || k === 'table4' || k === 'table6') {
+        fBoxU(fw, 0.04, fd, fCol, 0, 0.74, 0);
+        [[-fw/2+0.05,fd/2-0.05],[fw/2-0.05,fd/2-0.05],[-fw/2+0.05,-fd/2+0.05],[fw/2-0.05,-fd/2+0.05]].forEach(([ox,oz])=>fCylU(0.025,0.74,darkCol,ox,0,oz));
+      } else if (k === 'tableRnd') {
+        fCylU(fw/2*0.85, 0.04, fCol, 0, 0.74, 0);
+        fCylU(0.04, 0.74, darkCol, 0, 0, 0);
+      } else if (k === 'sofa2' || k === 'sofa3' || k === 'armchair') {
+        fBoxU(fw, 0.06, fd*0.65, fCol, 0, 0.42, fd*0.07);
+        fBoxU(fw, 0.55, 0.1, fCol, 0, 0.42, -fd*0.32);
+      } else if (k === 'bedSgl' || k === 'bedDbl' || k === 'bedKng') {
+        fBoxU(fw, 0.22, fd*0.82, fCol, 0, 0, fd*0.08);
+        fBoxU(fw, 0.38, fd*0.12, darkCol, 0, 0, -fd*0.45);
+      } else if (k === 'toilet') {
+        fBoxU(fw, 0.35, fd*0.35, fCol, 0, 0.78, -fd*0.32);
+        fCylU(fw*0.42, 0.42, fCol, 0, 0.38, fd*0.1);
+      } else if (k === 'sink') {
+        fCylU(Math.min(fw,fd)*0.12, 0.72, new THREE.Color(0xd0d0d0), 0, 0, 0);
+        fBoxU(fw, 0.06, fd, fCol, 0, 0.72, 0);
+      } else if (k === 'treeRnd' || k === 'treeL' || k === 'plantS') {
+        fCylU(0.03, 1.2, new THREE.Color(0x8b6914), 0, 0, 0);
+        fCylU(Math.min(fw,fd)/2*0.85, Math.min(fw,fd)*0.7, new THREE.Color(0x5a9e36), 0, 1.2, 0);
+      } else {
+        fBoxU(fw, 0.8, fd, fCol);
+      }
+    }
+  });
 
   requestRender();
 }
@@ -1964,6 +2494,7 @@ window.addEventListener('keydown', e => {
   if (e.code === 'KeyG') setTool('grid');
   if (e.code === 'KeyL') setTool('line');
   if (e.code === 'KeyC') setTool('circle');
+  if (e.code === 'KeyE' && state.selected) { rotateSelected(90); }
   if (e.code === 'Escape') {
     state.selected = null; multiSelected = [];
     hidePopups(); draw2D();
@@ -2167,6 +2698,14 @@ function updateCtxToolbar(obj) {
 function updatePropsPanel(obj) { updateCtxToolbar(obj); }
 
 // Live input handler — doesn't reset input value (user is still typing)
+function stepFloors(delta) {
+  const input = document.getElementById('prop-stories');
+  const cur = parseInt(input.value) || 1;
+  const next = Math.max(1, Math.min(99, cur + delta));
+  input.value = next;
+  applyProp('floors', next);
+}
+
 function applyPropLive(key, inputEl) {
   const val = parseFloat(inputEl.value);
   if (isNaN(val) || val <= 0) return; // ignore mid-type invalid values
@@ -2470,17 +3009,122 @@ function setVPMode(mode) {
   const vo = document.getElementById('vbtn-ortho');
   if (vp) { vp.classList.toggle('active', mode === 'persp'); }
   if (vo) { vo.classList.toggle('active', mode === 'ortho'); }
+  // Clear preset highlights
+  ['top','front','right'].forEach(p => {
+    const b = document.getElementById('vbtn-' + p);
+    if (b) b.classList.remove('active');
+  });
   if (mode === 'ortho') {
-    orbitPhi = 0.01; // nearly top-down
-    orbitDist = 30;
+    orbitPhi = 0.001; orbitDist = 30;
   } else {
-    orbitPhi = 0.92;
-    orbitDist = 22;
+    orbitPhi = 0.92; orbitDist = 22;
   }
+  setCameraFromOrbit();
   requestRender();
 }
 
-function cycleViewMode() { /* future: top/front/side */ }
+function setViewPreset(preset) {
+  ['top','front','right'].forEach(p => {
+    const b = document.getElementById('vbtn-' + p);
+    if (b) b.classList.remove('active');
+  });
+  const btn = document.getElementById('vbtn-' + preset);
+  if (btn) btn.classList.add('active');
+
+  // Compute model centre to orbit around (same as zoomExtents does)
+  const objs = state.plans[0].objects;
+  if (objs.length) {
+    const SC = 1/48, CX = PLAN_W/2, CZ = PLAN_H/2;
+    let minX=Infinity,maxX=-Infinity,minY=0,maxY=0,minZ=Infinity,maxZ=-Infinity;
+    objs.forEach(o => {
+      if (o.x == null) return;
+      const x = (o.x - CX)*SC, z = (o.y - CZ)*SC;
+      const w = (o.w||0)*SC, d = (o.h||0)*SC;
+      minX=Math.min(minX,x); maxX=Math.max(maxX,x+w);
+      minZ=Math.min(minZ,z); maxZ=Math.max(maxZ,z+d);
+      const h = (o.floors||1)*(o.floorH||3.2);
+      maxY = Math.max(maxY, h);
+    });
+    orbitTarget.set((minX+maxX)/2, maxY*0.4, (minZ+maxZ)/2);
+    const span = Math.max(maxX-minX, maxZ-minZ, maxY);
+    orbitDist = Math.max(8, span * 1.6);
+  }
+
+  if (preset === 'top') {
+    orbitPhi = 0.001; orbitTheta = 0;
+  } else if (preset === 'front') {
+    orbitPhi = Math.PI/2 - 0.001; orbitTheta = 0;
+  } else if (preset === 'right') {
+    orbitPhi = Math.PI/2 - 0.001; orbitTheta = Math.PI/2;
+  }
+  setCameraFromOrbit();
+  requestRender();
+}
+
+function cycleViewMode() { /* removed — use setViewPreset */ }
+
+// ── SAVED VIEWS ──
+function saveCurrentView() {
+  const n = state.savedViews.length + 1;
+  const name = prompt('View name:', 'View ' + n);
+  if (!name) return;
+  state.savedViews.push({
+    name,
+    theta: orbitTheta,
+    phi: orbitPhi,
+    dist: orbitDist,
+    target: { x: orbitTarget.x, y: orbitTarget.y, z: orbitTarget.z },
+  });
+  renderSavedViews();
+  scheduleAutosave();
+}
+
+function recallView(idx) {
+  const v = state.savedViews[idx];
+  if (!v) return;
+  orbitTheta = v.theta;
+  orbitPhi = v.phi;
+  orbitDist = v.dist;
+  orbitTarget.set(v.target.x, v.target.y, v.target.z);
+  // Clear preset highlights
+  ['top','front','right','persp','ortho'].forEach(p => {
+    const b = document.getElementById('vbtn-' + p);
+    if (b) b.classList.remove('active');
+  });
+  setCameraFromOrbit();
+  requestRender();
+}
+
+function deleteView(idx) {
+  state.savedViews.splice(idx, 1);
+  renderSavedViews();
+  scheduleAutosave();
+}
+
+function renderSavedViews() {
+  const list = document.getElementById('saved-views-list');
+  if (!list) return;
+  list.innerHTML = '';
+  (state.savedViews || []).forEach((v, i) => {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:center;gap:2px;';
+    const btn = document.createElement('button');
+    btn.className = 'vpbtn';
+    btn.textContent = v.name;
+    btn.title = 'Recall: ' + v.name;
+    btn.style.cssText = 'font-size:9px;padding:2px 5px;flex:1;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:80px;';
+    btn.onclick = () => recallView(i);
+    const del = document.createElement('button');
+    del.className = 'vpbtn';
+    del.textContent = '×';
+    del.title = 'Delete view';
+    del.style.cssText = 'font-size:10px;padding:2px 4px;color:var(--text3);';
+    del.onclick = (e) => { e.stopPropagation(); deleteView(i); };
+    row.appendChild(btn);
+    row.appendChild(del);
+    list.appendChild(row);
+  });
+}
 
 function triggerRender() {
   // Flash a render effect
@@ -2500,6 +3144,205 @@ function triggerRender() {
 
 function openChat() {
   alert('Chat feature — connect to Anthropic API to enable AI architectural consultation.');
+}
+
+// ═══════════════════════════════════════════════════════
+// SITE CONTEXT — OSM building footprint importer
+// ═══════════════════════════════════════════════════════
+let contextMeshes = []; // Three.js ghost meshes for context buildings
+
+// ═══════════════════════════════════════════════════════
+// CONTEXT PANEL — Leaflet map + OSM rectangle import
+// ═══════════════════════════════════════════════════════
+let ctxMap = null;
+let ctxRect = null;        // Leaflet rectangle layer
+let ctxRectBounds = null;  // selected bbox [s,w,n,e]
+let ctxDrawing = false;
+let ctxDrawStart = null;
+
+function openContextPanel() {
+  const p = document.getElementById('context-panel');
+  const wasHidden = p.style.display === 'none' || !p.style.display;
+  p.style.display = wasHidden ? 'block' : 'none';
+  if (wasHidden) initCtxMap();
+}
+
+function initCtxMap() {
+  if (ctxMap) { ctxMap.invalidateSize(); return; }
+  if (typeof L === 'undefined') {
+    // Load Leaflet JS dynamically
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js';
+    s.onload = () => _buildMap();
+    document.head.appendChild(s);
+  } else {
+    _buildMap();
+  }
+}
+
+function _buildMap() {
+  ctxMap = L.map('ctx-map', { zoomControl: true }).setView([51.505, -0.09], 15);
+  // CartoDB Positron: no Referer restriction, works from local files, clean minimal style
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+    attribution: '© <a href="https://openstreetmap.org">OpenStreetMap</a> © <a href="https://carto.com">CARTO</a>',
+    subdomains: 'abcd', maxZoom: 20
+  }).addTo(ctxMap);
+
+  // Rectangle draw on mousedown → mousemove → mouseup
+  ctxMap.on('mousedown', e => {
+    if (!ctxDrawing) return;
+    ctxDrawStart = e.latlng;
+    if (ctxRect) { ctxMap.removeLayer(ctxRect); ctxRect = null; }
+    ctxMap.dragging.disable();
+  });
+  ctxMap.on('mousemove', e => {
+    if (!ctxDrawing || !ctxDrawStart) return;
+    if (ctxRect) ctxMap.removeLayer(ctxRect);
+    ctxRect = L.rectangle([ctxDrawStart, e.latlng], {
+      color: '#2a6dd4', weight: 2, fillOpacity: 0.15
+    }).addTo(ctxMap);
+  });
+  ctxMap.on('mouseup', e => {
+    if (!ctxDrawing || !ctxDrawStart) return;
+    ctxMap.dragging.enable();
+    ctxDrawing = false;
+    const drawBtn = document.getElementById('ctx-draw-btn');
+    if (drawBtn) { drawBtn.textContent = '⬚ Draw Selection Rectangle'; drawBtn.style.background = ''; }
+    if (ctxRect) {
+      ctxRectBounds = ctxRect.getBounds();
+      const importBtn = document.getElementById('ctx-import-btn');
+      if (importBtn) {
+        importBtn.disabled = false;
+        importBtn.style.background = '#2a6dd4';
+        importBtn.style.cursor = 'pointer';
+      }
+      const area = (ctxRectBounds.getNorth()-ctxRectBounds.getSouth())*111320 *
+                   (ctxRectBounds.getEast()-ctxRectBounds.getWest())*111320*Math.cos(ctxRectBounds.getCenter().lat*Math.PI/180);
+      setCtxStatus('Area selected: ~' + (Math.sqrt(Math.abs(area))|0) + 'm × ' + (Math.sqrt(Math.abs(area))|0) + 'm. Click Import to load buildings.');
+    }
+    ctxDrawStart = null;
+  });
+}
+
+function startRectDraw() {
+  if (!ctxMap) { initCtxMap(); setTimeout(startRectDraw, 500); return; }
+  ctxDrawing = true;
+  ctxDrawStart = null;
+  const btn = document.getElementById('ctx-draw-btn');
+  if (btn) { btn.textContent = '✏ Click & drag on map…'; btn.style.background = 'rgba(42,109,212,0.12)'; }
+  setCtxStatus('Click and drag on the map to select an area.');
+}
+
+function setCtxStatus(msg, err=false) {
+  const el = document.getElementById('ctx-status');
+  if (el) { el.textContent = msg; el.style.color = err ? '#c0392b' : 'var(--text3)'; }
+}
+
+function useMyLocation() {
+  setCtxStatus('Getting location…');
+  navigator.geolocation.getCurrentPosition(pos => {
+    const lat = pos.coords.latitude, lon = pos.coords.longitude;
+    if (ctxMap) ctxMap.setView([lat, lon], 16);
+    else { document.getElementById('ctx-location-input').value = lat.toFixed(6)+','+lon.toFixed(6); }
+    setCtxStatus('Located: ' + lat.toFixed(4) + ', ' + lon.toFixed(4));
+  }, () => setCtxStatus('Location denied.', true));
+}
+
+async function geocodeLocation() {
+  const raw = document.getElementById('ctx-location-input').value.trim();
+  if (!raw) return;
+  const ll = raw.match(/^(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)$/);
+  if (ll) {
+    const lat = parseFloat(ll[1]), lon = parseFloat(ll[2]);
+    if (ctxMap) ctxMap.setView([lat, lon], 16);
+    return;
+  }
+  setCtxStatus('Geocoding…');
+  try {
+    const url = 'https://nominatim.openstreetmap.org/search?q=' + encodeURIComponent(raw) + '&format=json&limit=1';
+    const res = await fetch(url, { headers: { 'Accept-Language': 'en' } });
+    const data = await res.json();
+    if (!data.length) { setCtxStatus('Not found.', true); return; }
+    const lat = parseFloat(data[0].lat), lon = parseFloat(data[0].lon);
+    if (ctxMap) ctxMap.setView([lat, lon], 16);
+    setCtxStatus('Found: ' + data[0].display_name.split(',').slice(0,2).join(','));
+  } catch(e) { setCtxStatus('Geocode error.', true); }
+}
+
+async function importSelectedArea() {
+  if (!ctxRectBounds) { setCtxStatus('Draw a rectangle first.', true); return; }
+  const s = ctxRectBounds.getSouth(), w = ctxRectBounds.getWest();
+  const n = ctxRectBounds.getNorth(), e = ctxRectBounds.getEast();
+  const bbox = `${s},${w},${n},${e}`;
+  const query = `[out:json][timeout:25];(way["building"](${bbox}););out body;>;out skel qt;`;
+  setCtxStatus('Fetching buildings from OpenStreetMap…');
+
+  const ENDPOINTS = [
+    'https://overpass-api.de/api/interpreter',
+    'https://overpass.kumi.systems/api/interpreter',
+  ];
+
+  let data = null;
+  for (const ep of ENDPOINTS) {
+    try {
+      const res = await fetch(ep, {
+        method:'POST',
+        headers:{'Content-Type':'application/x-www-form-urlencoded'},
+        body:'data='+encodeURIComponent(query), mode:'cors'
+      });
+      if (res.ok) { data = await res.json(); break; }
+    } catch(e) { /* try next */ }
+  }
+
+  if (!data) {
+    setCtxStatus('Could not reach OSM servers. Check internet connection.', true);
+    return;
+  }
+
+  const centre = ctxRectBounds.getCenter();
+  const bldCount = data.elements.filter(el => el.type === 'way').length;
+  setCtxStatus(`Loaded ${bldCount} buildings — rendering in 3D…`);
+  renderOSMContext(data, centre.lat, centre.lng);
+  document.getElementById('context-panel').style.display = 'none';
+  setTimeout(() => setCtxStatus(''), 3000);
+}
+
+function renderOSMContext(osm, originLat, originLon) {
+  clearContextBuildings();
+  const nodes = {};
+  osm.elements.filter(e => e.type === 'node').forEach(n => { nodes[n.id] = n; });
+
+  function toXZ(lat2, lon2) {
+    const x = (lon2 - originLon) * 111320 * Math.cos(originLat * Math.PI/180);
+    const z = -(lat2 - originLat) * 111320;
+    return { x, z };
+  }
+
+  const ghostMat = new THREE.MeshStandardMaterial({
+    color: 0xc8c0b0, transparent: true, opacity: 0.32, roughness: 0.9
+  });
+
+  osm.elements.filter(e => e.type === 'way' && e.nodes).forEach(way => {
+    const pts = way.nodes.map(nid => nodes[nid]).filter(Boolean).map(n => toXZ(n.lat, n.lon));
+    if (pts.length < 3) return;
+    const shape = new THREE.Shape();
+    shape.moveTo(pts[0].x, pts[0].z);
+    pts.slice(1).forEach(p => shape.lineTo(p.x, p.z));
+    shape.closePath();
+    const levels = parseInt(way.tags && (way.tags['building:levels'] || way.tags['levels'])) || 3;
+    const height = levels * 3.0;
+    const geo = new THREE.ExtrudeGeometry(shape, { depth: height, bevelEnabled: false });
+    geo.applyMatrix4(new THREE.Matrix4().makeRotationX(-Math.PI/2));
+    const mesh = new THREE.Mesh(geo, ghostMat);
+    threeScene.add(mesh); contextMeshes.push(mesh);
+  });
+  requestRender();
+}
+
+function clearContextBuildings() {
+  contextMeshes.forEach(m => threeScene.remove(m));
+  contextMeshes = [];
+  requestRender();
 }
 
 // ═══════════════════════════════════════════════════════
@@ -2549,45 +3392,336 @@ function deleteSel() {
 // FURNITURE PICKER
 // ═══════════════════════════════════════════════════════
 const FURNITURE = {
+  // ── GROUPS — placed as multiple objects at once ──
+  // Each piece has dx,dy offsets in metres from group centre, plus w,h,kind,rotation(deg)
+  groups: [
+    { kind:'grpWorkstation', label:'Workstation', w:1.6, h:1.35,
+      pieces:[
+        { kind:'desk',  w:1.6, h:0.8,  dx:0,     dy:-0.275 },
+        { kind:'chair', w:0.55,h:0.55, dx:0,     dy: 0.525 },
+      ]},
+    { kind:'grpRound4', label:'Round ×4', w:2.4, h:2.4,
+      pieces:[
+        { kind:'tableRnd', w:1.0, h:1.0, dx:0, dy:0 },
+        { kind:'stool', w:0.42,h:0.42, dx: 0,    dy:-0.85 },
+        { kind:'stool', w:0.42,h:0.42, dx: 0.85, dy: 0    },
+        { kind:'stool', w:0.42,h:0.42, dx: 0,    dy: 0.85 },
+        { kind:'stool', w:0.42,h:0.42, dx:-0.85, dy: 0    },
+      ]},
+    { kind:'grpRound6', label:'Round ×6', w:2.8, h:2.8,
+      pieces:[
+        { kind:'tableRnd', w:1.2, h:1.2, dx:0, dy:0 },
+        { kind:'stool', w:0.42,h:0.42, dx: 0,    dy:-1.0  },
+        { kind:'stool', w:0.42,h:0.42, dx: 0.87, dy:-0.5  },
+        { kind:'stool', w:0.42,h:0.42, dx: 0.87, dy: 0.5  },
+        { kind:'stool', w:0.42,h:0.42, dx: 0,    dy: 1.0  },
+        { kind:'stool', w:0.42,h:0.42, dx:-0.87, dy: 0.5  },
+        { kind:'stool', w:0.42,h:0.42, dx:-0.87, dy:-0.5  },
+      ]},
+    { kind:'grpLounge', label:'Lounge', w:3.6, h:2.8,
+      pieces:[
+        { kind:'sofa3',    w:2.4, h:0.85, dx: 0,    dy:-0.875 },
+        { kind:'sofa2',    w:1.8, h:0.85, dx:-0.9,  dy: 0.575, rot:90 },
+        { kind:'tableRnd', w:0.7, h:0.7,  dx: 0.6,  dy: 0.35  },
+        { kind:'armchair', w:0.8, h:0.8,  dx: 1.2,  dy: 0.5   },
+      ]},
+    { kind:'grpCanteen', label:'Canteen', w:2.0, h:3.6,
+      pieces:[
+        { kind:'table6',   w:1.8, h:0.9,  dx:0, dy:-1.05 },
+        { kind:'chair',    w:0.5, h:0.5,  dx:-0.6, dy:-1.6  },
+        { kind:'chair',    w:0.5, h:0.5,  dx: 0,   dy:-1.6  },
+        { kind:'chair',    w:0.5, h:0.5,  dx: 0.6, dy:-1.6  },
+        { kind:'chair',    w:0.5, h:0.5,  dx:-0.6, dy:-0.5  },
+        { kind:'chair',    w:0.5, h:0.5,  dx: 0,   dy:-0.5  },
+        { kind:'chair',    w:0.5, h:0.5,  dx: 0.6, dy:-0.5  },
+        { kind:'table6',   w:1.8, h:0.9,  dx:0, dy: 1.05 },
+        { kind:'chair',    w:0.5, h:0.5,  dx:-0.6, dy: 0.6  },
+        { kind:'chair',    w:0.5, h:0.5,  dx: 0,   dy: 0.6  },
+        { kind:'chair',    w:0.5, h:0.5,  dx: 0.6, dy: 0.6  },
+        { kind:'chair',    w:0.5, h:0.5,  dx:-0.6, dy: 1.6  },
+        { kind:'chair',    w:0.5, h:0.5,  dx: 0,   dy: 1.6  },
+        { kind:'chair',    w:0.5, h:0.5,  dx: 0.6, dy: 1.6  },
+      ]},
+  ],
   seating: [
-    { emoji:'🪑', label:'Chair',    w:0.5, h:0.5 },
-    { emoji:'🛋️', label:'Sofa 2',   w:1.8, h:0.9 },
-    { emoji:'🛋️', label:'Sofa 3',   w:2.4, h:0.9 },
-    { emoji:'💺', label:'Armchair', w:0.8, h:0.8 },
-    { emoji:'🪑', label:'Stool',    w:0.4, h:0.4 },
+    { kind:'chair',    label:'Chair',    w:0.55, h:0.55 },
+    { kind:'sofa2',    label:'Sofa 2',   w:1.8,  h:0.85 },
+    { kind:'sofa3',    label:'Sofa 3',   w:2.4,  h:0.85 },
+    { kind:'armchair', label:'Armchair', w:0.8,  h:0.8  },
+    { kind:'stool',    label:'Stool',    w:0.42, h:0.42 },
   ],
   tables: [
-    { emoji:'⬛', label:'Desk',     w:1.6, h:0.8 },
-    { emoji:'⬜', label:'Table 4',  w:1.4, h:0.8 },
-    { emoji:'⬜', label:'Table 6',  w:1.8, h:0.9 },
-    { emoji:'🔵', label:'Round',   w:1.0, h:1.0 },
-    { emoji:'⬛', label:'Counter',  w:2.4, h:0.6 },
+    { kind:'desk',     label:'Desk',     w:1.6,  h:0.8  },
+    { kind:'table4',   label:'Table 4',  w:1.4,  h:0.8  },
+    { kind:'table6',   label:'Table 6',  w:1.8,  h:0.9  },
+    { kind:'tableRnd', label:'Round',    w:1.0,  h:1.0  },
+    { kind:'counter',  label:'Counter',  w:2.4,  h:0.6  },
   ],
   beds: [
-    { emoji:'🛏️', label:'Single',   w:0.9, h:2.0 },
-    { emoji:'🛏️', label:'Double',   w:1.4, h:2.0 },
-    { emoji:'🛏️', label:'King',     w:1.8, h:2.0 },
-    { emoji:'🛁', label:'Bath',     w:0.8, h:1.7 },
-    { emoji:'🚿', label:'Shower',   w:0.9, h:0.9 },
+    { kind:'bedSgl',   label:'Single',   w:0.9,  h:2.0  },
+    { kind:'bedDbl',   label:'Double',   w:1.4,  h:2.0  },
+    { kind:'bedKng',   label:'King',     w:1.8,  h:2.0  },
   ],
   plants: [
-    { emoji:'🌿', label:'Plant S',  w:0.3, h:0.3 },
-    { emoji:'🌳', label:'Tree',     w:0.8, h:0.8 },
-    { emoji:'🌲', label:'Tree L',   w:1.5, h:1.5 },
-    { emoji:'🪴', label:'Pot',      w:0.4, h:0.4 },
-    { emoji:'🌵', label:'Cactus',   w:0.3, h:0.3 },
+    { kind:'treeNaked',label:'Tree',     w:1.0,  h:1.0  },
+    { kind:'treeRnd',  label:'Evergreen',w:0.8,  h:0.8  },
+    { kind:'plantS',   label:'Plant',    w:0.3,  h:0.3  },
+    { kind:'pot',      label:'Pot',      w:0.4,  h:0.4  },
   ],
 };
 
-let activeFurnCat = 'seating';
+let activeFurnCat = 'groups';
 let activeFurnItem = null;
 
 function setFurnCat(cat) {
   activeFurnCat = cat;
   document.querySelectorAll('.furn-cat-btn').forEach(b =>
-    b.classList.toggle('active', b.textContent.toLowerCase() === cat)
+    b.classList.toggle('active', b.dataset.cat === cat)
   );
   renderFurnGrid();
+}
+
+// ── FURNITURE TOP-VIEW DRAWING (shared by picker icons + 2D canvas) ──
+// ctx: canvas 2d context, kind: furniture type, x/y: top-left, w/h: pixel size
+function drawFurnTopView(ctx, kind, x, y, w, h, color) {
+  const c = color || '#e8e5dc';
+  const stroke = 'rgba(0,0,0,0.35)';
+  ctx.save();
+  ctx.translate(x, y);
+
+  switch (kind) {
+    case 'chair': {
+      // Seat square + back bar
+      const bh = h * 0.22;
+      ctx.fillStyle = c; ctx.strokeStyle = stroke; ctx.lineWidth = Math.max(0.8, w*0.04);
+      ctx.fillRect(0, bh, w, h - bh); ctx.strokeRect(0, bh, w, h - bh);
+      ctx.fillRect(0, 0, w, bh); ctx.strokeRect(0, 0, w, bh);
+      // 4 legs as small circles
+      const lr = Math.max(1.5, w*0.07);
+      [0.15,0.85].forEach(fx => [0.15,0.85].forEach(fy => {
+        ctx.beginPath(); ctx.arc(w*fx, bh + (h-bh)*fy, lr, 0, Math.PI*2);
+        ctx.fillStyle='rgba(0,0,0,0.2)'; ctx.fill();
+      }));
+      break;
+    }
+    case 'stool': {
+      ctx.fillStyle = c; ctx.strokeStyle = stroke; ctx.lineWidth = Math.max(0.8, w*0.05);
+      ctx.beginPath(); ctx.arc(w/2, h/2, Math.min(w,h)/2*0.85, 0, Math.PI*2);
+      ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.arc(w/2, h/2, Math.min(w,h)/2*0.4, 0, Math.PI*2);
+      ctx.strokeStyle='rgba(0,0,0,0.15)'; ctx.stroke();
+      break;
+    }
+    case 'armchair': {
+      const arm = w * 0.15;
+      ctx.fillStyle = c; ctx.strokeStyle = stroke; ctx.lineWidth = Math.max(0.8, w*0.04);
+      // Back
+      ctx.fillRect(arm, 0, w-arm*2, h*0.3); ctx.strokeRect(arm, 0, w-arm*2, h*0.3);
+      // Seat
+      ctx.fillRect(arm, h*0.3, w-arm*2, h*0.7); ctx.strokeRect(arm, h*0.3, w-arm*2, h*0.7);
+      // Arms
+      ctx.fillRect(0, 0, arm, h); ctx.strokeRect(0, 0, arm, h);
+      ctx.fillRect(w-arm, 0, arm, h); ctx.strokeRect(w-arm, 0, arm, h);
+      break;
+    }
+    case 'sofa2': case 'sofa3': {
+      const arm = w * 0.1;
+      const back = h * 0.28;
+      ctx.fillStyle = c; ctx.strokeStyle = stroke; ctx.lineWidth = Math.max(0.8, w*0.03);
+      ctx.fillRect(0, 0, w, h); ctx.strokeRect(0, 0, w, h);
+      // Back cushions line
+      ctx.beginPath(); ctx.moveTo(arm, back); ctx.lineTo(w-arm, back);
+      ctx.strokeStyle='rgba(0,0,0,0.18)'; ctx.stroke();
+      // Cushion dividers
+      const n = kind==='sofa2' ? 2 : 3;
+      for (let i=1; i<n; i++) {
+        const cx = arm + (w-arm*2) * i/n;
+        ctx.beginPath(); ctx.moveTo(cx, back); ctx.lineTo(cx, h);
+        ctx.strokeStyle='rgba(0,0,0,0.12)'; ctx.lineWidth=0.8; ctx.stroke();
+      }
+      break;
+    }
+    case 'desk': case 'counter': {
+      ctx.fillStyle = c; ctx.strokeStyle = stroke; ctx.lineWidth = Math.max(0.8, w*0.03);
+      ctx.fillRect(0, 0, w, h); ctx.strokeRect(0, 0, w, h);
+      // Edge line showing thickness
+      ctx.strokeStyle='rgba(0,0,0,0.12)'; ctx.lineWidth=0.7;
+      ctx.beginPath(); ctx.moveTo(w*0.07, h*0.15); ctx.lineTo(w*0.93, h*0.15); ctx.stroke();
+      break;
+    }
+    case 'table4': case 'table6': {
+      ctx.fillStyle = c; ctx.strokeStyle = stroke; ctx.lineWidth = Math.max(0.8, w*0.03);
+      ctx.fillRect(w*0.05, h*0.05, w*0.9, h*0.9);
+      ctx.strokeRect(w*0.05, h*0.05, w*0.9, h*0.9);
+      // Legs
+      const lsz = Math.max(2, w*0.06);
+      [[0.05,0.05],[0.95,0.05],[0.05,0.95],[0.95,0.95]].forEach(([fx,fy]) => {
+        ctx.fillStyle='rgba(0,0,0,0.25)';
+        ctx.fillRect(w*fx - lsz/2, h*fy - lsz/2, lsz, lsz);
+      });
+      break;
+    }
+    case 'tableRnd': {
+      ctx.fillStyle = c; ctx.strokeStyle = stroke; ctx.lineWidth = Math.max(0.8, w*0.04);
+      ctx.beginPath(); ctx.arc(w/2, h/2, Math.min(w,h)/2*0.85, 0, Math.PI*2);
+      ctx.fill(); ctx.stroke();
+      // Centre cross
+      ctx.strokeStyle='rgba(0,0,0,0.12)'; ctx.lineWidth=0.7;
+      ctx.beginPath(); ctx.moveTo(w/2, h*0.2); ctx.lineTo(w/2, h*0.8); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(w*0.2, h/2); ctx.lineTo(w*0.8, h/2); ctx.stroke();
+      break;
+    }
+    case 'bedSgl': case 'bedDbl': case 'bedKng': {
+      ctx.fillStyle = c; ctx.strokeStyle = stroke; ctx.lineWidth = Math.max(0.8, w*0.03);
+      ctx.fillRect(0, 0, w, h); ctx.strokeRect(0, 0, w, h);
+      // Pillow(s) at top
+      const pw2 = kind==='bedSgl' ? w*0.7 : w*0.42;
+      const ph2 = h*0.2, pm = w*0.07, pt = h*0.06;
+      ctx.fillStyle='rgba(255,255,255,0.6)'; ctx.strokeStyle='rgba(0,0,0,0.2)';
+      if (kind==='bedSgl') {
+        ctx.fillRect(w/2-pw2/2, pt, pw2, ph2); ctx.strokeRect(w/2-pw2/2, pt, pw2, ph2);
+      } else {
+        ctx.fillRect(pm, pt, pw2, ph2); ctx.strokeRect(pm, pt, pw2, ph2);
+        ctx.fillRect(w-pm-pw2, pt, pw2, ph2); ctx.strokeRect(w-pm-pw2, pt, pw2, ph2);
+      }
+      // Blanket fold line
+      ctx.strokeStyle='rgba(0,0,0,0.15)'; ctx.lineWidth=0.8;
+      ctx.beginPath(); ctx.moveTo(0, ph2+pt*2); ctx.lineTo(w, ph2+pt*2); ctx.stroke();
+      break;
+    }
+    case 'bath': {
+      ctx.fillStyle = c; ctx.strokeStyle = stroke; ctx.lineWidth = Math.max(0.8, w*0.04);
+      // Outer tub
+      const r2 = Math.min(w,h)*0.15;
+      ctx.beginPath();
+      ctx.roundRect(0, 0, w, h, [r2, r2, w*0.1, w*0.1]);
+      ctx.fill(); ctx.stroke();
+      // Inner basin
+      ctx.fillStyle='rgba(180,210,230,0.4)';
+      ctx.beginPath();
+      ctx.roundRect(w*0.1, h*0.1, w*0.8, h*0.75, r2*0.5);
+      ctx.fill(); ctx.stroke();
+      // Tap
+      ctx.fillStyle='rgba(0,0,0,0.2)';
+      ctx.fillRect(w*0.35, h*0.04, w*0.3, h*0.08);
+      break;
+    }
+    case 'shower': {
+      ctx.fillStyle = c; ctx.strokeStyle = stroke; ctx.lineWidth = Math.max(0.8, w*0.04);
+      ctx.fillRect(0, 0, w, h); ctx.strokeRect(0, 0, w, h);
+      // Drain circle
+      ctx.beginPath(); ctx.arc(w/2, h/2, Math.min(w,h)*0.15, 0, Math.PI*2);
+      ctx.strokeStyle='rgba(0,0,0,0.25)'; ctx.stroke();
+      // Corner arc (shower door)
+      ctx.beginPath(); ctx.arc(0, 0, Math.min(w,h)*0.85, 0, Math.PI/2);
+      ctx.strokeStyle='rgba(0,0,0,0.2)'; ctx.lineWidth=1.5; ctx.stroke();
+      break;
+    }
+    case 'treeNaked': {
+      // Plan view of bare deciduous tree: trunk dot + radiating bare branch lines
+      const cx2 = w/2, cy2 = h/2, r = Math.min(w,h)/2;
+      // Canopy outline — dashed circle (no leaves)
+      ctx.strokeStyle = 'rgba(80,60,30,0.5)'; ctx.lineWidth = Math.max(0.6, r*0.06);
+      ctx.setLineDash([r*0.18, r*0.12]);
+      ctx.beginPath(); ctx.arc(cx2, cy2, r*0.88, 0, Math.PI*2); ctx.stroke();
+      ctx.setLineDash([]);
+      // Trunk dot
+      ctx.fillStyle = 'rgba(80,50,20,0.85)';
+      ctx.beginPath(); ctx.arc(cx2, cy2, Math.max(1.5, r*0.1), 0, Math.PI*2); ctx.fill();
+      // Primary branches radiating out
+      const nBranch = 7;
+      ctx.strokeStyle = 'rgba(80,50,20,0.7)'; ctx.lineWidth = Math.max(0.7, r*0.05);
+      for (let b = 0; b < nBranch; b++) {
+        const ang = (b / nBranch) * Math.PI * 2;
+        const bx = cx2 + Math.cos(ang) * r * 0.72;
+        const by = cy2 + Math.sin(ang) * r * 0.72;
+        ctx.beginPath(); ctx.moveTo(cx2, cy2); ctx.lineTo(bx, by); ctx.stroke();
+        // Sub-branches
+        ctx.lineWidth = Math.max(0.4, r*0.03);
+        for (let s2 = -1; s2 <= 1; s2 += 2) {
+          const sang = ang + s2 * 0.55;
+          const sx2 = bx + Math.cos(sang) * r * 0.3;
+          const sy2 = by + Math.sin(sang) * r * 0.3;
+          ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(sx2, sy2); ctx.stroke();
+        }
+        ctx.lineWidth = Math.max(0.7, r*0.05);
+      }
+      break;
+    }
+    case 'treeRnd': case 'treeL': case 'plantS': case 'Evergreen': {
+      const r3 = Math.min(w,h)/2;
+      ctx.fillStyle='rgba(120,180,90,0.55)'; ctx.strokeStyle='rgba(60,120,40,0.5)';
+      ctx.lineWidth = Math.max(0.8, r3*0.08);
+      ctx.beginPath(); ctx.arc(w/2, h/2, r3*0.85, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+      // Inner rings
+      ctx.beginPath(); ctx.arc(w/2, h/2, r3*0.5, 0, Math.PI*2);
+      ctx.strokeStyle='rgba(60,120,40,0.25)'; ctx.stroke();
+      break;
+    }
+    case 'pot': {
+      ctx.fillStyle='rgba(180,130,80,0.6)'; ctx.strokeStyle='rgba(120,80,40,0.5)';
+      ctx.lineWidth = Math.max(0.8, w*0.06);
+      ctx.beginPath(); ctx.arc(w/2, h/2, Math.min(w,h)/2*0.8, 0, Math.PI*2);
+      ctx.fill(); ctx.stroke();
+      ctx.fillStyle='rgba(80,150,60,0.6)';
+      ctx.beginPath(); ctx.arc(w/2, h/2, Math.min(w,h)/2*0.45, 0, Math.PI*2);
+      ctx.fill();
+      break;
+    }
+    case 'toilet': {
+      // Plan view: cistern at top (rectangle), bowl as D-shape below
+      const cisH = h * 0.35, bowlH = h * 0.65;
+      ctx.fillStyle = c; ctx.strokeStyle = stroke; ctx.lineWidth = Math.max(0.8, w*0.04);
+      // Cistern
+      ctx.fillRect(0, 0, w, cisH); ctx.strokeRect(0, 0, w, cisH);
+      // Bowl — ellipse/rounded
+      ctx.beginPath();
+      ctx.ellipse(w/2, cisH + bowlH*0.5, w*0.45, bowlH*0.48, 0, 0, Math.PI*2);
+      ctx.fill(); ctx.stroke();
+      // Seat ring
+      ctx.strokeStyle = 'rgba(0,0,0,0.2)'; ctx.lineWidth = Math.max(0.5, w*0.025);
+      ctx.beginPath();
+      ctx.ellipse(w/2, cisH + bowlH*0.5, w*0.36, bowlH*0.38, 0, 0, Math.PI*2);
+      ctx.stroke();
+      break;
+    }
+    case 'sink': {
+      // Plan view: rectangular basin with rounded corners, tap at top, drain circle
+      ctx.fillStyle = c; ctx.strokeStyle = stroke; ctx.lineWidth = Math.max(0.8, w*0.04);
+      const r4 = Math.min(w,h)*0.12;
+      ctx.beginPath(); ctx.roundRect(0, 0, w, h, r4); ctx.fill(); ctx.stroke();
+      // Inner basin
+      ctx.fillStyle = 'rgba(180,210,230,0.35)';
+      ctx.beginPath(); ctx.roundRect(w*0.12, h*0.18, w*0.76, h*0.7, r4*0.5); ctx.fill();
+      ctx.strokeStyle = 'rgba(0,0,0,0.18)'; ctx.lineWidth = 0.7;
+      ctx.beginPath(); ctx.roundRect(w*0.12, h*0.18, w*0.76, h*0.7, r4*0.5); ctx.stroke();
+      // Drain
+      ctx.beginPath(); ctx.arc(w/2, h*0.55, Math.min(w,h)*0.07, 0, Math.PI*2);
+      ctx.strokeStyle = 'rgba(0,0,0,0.3)'; ctx.stroke();
+      // Tap
+      ctx.fillStyle = 'rgba(0,0,0,0.2)';
+      ctx.fillRect(w*0.38, h*0.05, w*0.24, h*0.1);
+      break;
+    }
+    case 'urinal': {
+      // Plan view: wall-mounted trapezoid shape
+      ctx.fillStyle = c; ctx.strokeStyle = stroke; ctx.lineWidth = Math.max(0.8, w*0.04);
+      ctx.beginPath();
+      ctx.moveTo(w*0.1, 0); ctx.lineTo(w*0.9, 0);    // back (wall side)
+      ctx.lineTo(w, h);     ctx.lineTo(0, h);          // front wider
+      ctx.closePath();
+      ctx.fill(); ctx.stroke();
+      // Drain
+      ctx.beginPath(); ctx.arc(w/2, h*0.65, Math.min(w,h)*0.1, 0, Math.PI*2);
+      ctx.strokeStyle = 'rgba(0,0,0,0.25)'; ctx.stroke();
+      break;
+    }
+    default: {
+      ctx.fillStyle = c; ctx.strokeStyle = stroke; ctx.lineWidth = 1;
+      ctx.fillRect(0, 0, w, h); ctx.strokeRect(0, 0, w, h);
+    }
+  }
+  ctx.restore();
 }
 
 function renderFurnGrid() {
@@ -2598,7 +3732,29 @@ function renderFurnGrid() {
     const el = document.createElement('div');
     el.className = 'furn-item' + (activeFurnItem === activeFurnCat + i ? ' active' : '');
     el.title = item.label;
-    el.textContent = item.emoji;
+    el.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:2px;padding:4px 2px;cursor:pointer;';
+    // Canvas icon
+    const cv = document.createElement('canvas');
+    const sz = 44;
+    cv.width = sz; cv.height = sz;
+    cv.style.cssText = 'display:block;border-radius:3px;';
+    const iconCtx = cv.getContext('2d');
+
+    if (item.pieces) {
+      // Group: draw composite top-view of all pieces
+      drawGroupTopView(iconCtx, item, sz);
+    } else {
+      const iw = item.w, ih = item.h;
+      const scale = iw > ih ? (sz * 0.82) / iw : (sz * 0.82) / ih;
+      const pw = iw * scale, ph = ih * scale;
+      drawFurnTopView(iconCtx, item.kind, (sz-pw)/2, (sz-ph)/2, pw, ph, '#d8d4cc');
+    }
+    el.appendChild(cv);
+    // Label
+    const lbl = document.createElement('span');
+    lbl.textContent = item.label;
+    lbl.style.cssText = 'font-size:8px;color:#888;font-family:var(--mono);white-space:nowrap;';
+    el.appendChild(lbl);
     el.addEventListener('click', () => {
       activeFurnItem = activeFurnCat + i;
       renderFurnGrid();
@@ -2610,17 +3766,65 @@ function renderFurnGrid() {
   });
 }
 
+// Draw composite top-view icon for a furniture group
+function drawGroupTopView(ctx, item, sz) {
+  // Find bounding box of all pieces
+  let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
+  item.pieces.forEach(p => {
+    minX = Math.min(minX, p.dx - p.w/2); maxX = Math.max(maxX, p.dx + p.w/2);
+    minY = Math.min(minY, p.dy - p.h/2); maxY = Math.max(maxY, p.dy + p.h/2);
+  });
+  const gw = maxX - minX, gh = maxY - minY;
+  const scale = Math.min((sz * 0.88) / gw, (sz * 0.88) / gh);
+  const offX = sz/2 - ((minX + maxX)/2) * scale;
+  const offY = sz/2 - ((minY + maxY)/2) * scale;
+  item.pieces.forEach(p => {
+    const px = offX + p.dx * scale - p.w * scale / 2;
+    const py = offY + p.dy * scale - p.h * scale / 2;
+    drawFurnTopView(ctx, p.kind, px, py, p.w * scale, p.h * scale, '#d8d4cc');
+  });
+}
+
 // place furniture on canvas click
 function placeFurniture(sx, sy) {
   const item = state.pendingFurniture;
   if (!item) return false;
-  const w = s2w(sx, sy);
+  const origin = s2w(sx, sy);
+
+  if (item.pieces) {
+    // Group: store as a single furnitureGroup object with pieces embedded
+    historySnapshot();
+    const gw = mToWorld(item.w), gh = mToWorld(item.h);
+    // Convert pieces to world-px offsets from group centre, store pw/ph in world-px
+    const storedPieces = item.pieces.map(p => ({
+      kind: p.kind,
+      dx: mToWorld(p.dx),  // offset from group centre in world-px
+      dy: mToWorld(p.dy),
+      pw: mToWorld(p.w),   // piece width in world-px
+      ph: mToWorld(p.h),
+      rot: p.rot || 0,
+    }));
+    const obj = {
+      id: nextId(), type: 'furnitureGroup',
+      x: origin.x - gw/2, y: origin.y - gh/2,
+      w: gw, h: gh,
+      label: item.label, kind: item.kind,
+      pieces: storedPieces,
+      rotation: 0,
+      color: '#e8e5dc',
+    };
+    objects().push(obj);
+    draw2D(); rebuild3D();
+    return true;
+  }
+
+  // Single item
   const obj = {
     id: nextId(), type: 'furniture',
-    x: w.x - mToWorld(item.w) / 2,
-    y: w.y - mToWorld(item.h) / 2,
+    x: origin.x - mToWorld(item.w) / 2,
+    y: origin.y - mToWorld(item.h) / 2,
     w: mToWorld(item.w), h: mToWorld(item.h),
-    label: item.label, emoji: item.emoji,
+    label: item.label, kind: item.kind,
     color: '#e8e5dc',
   };
   objects().push(obj);
@@ -2635,11 +3839,19 @@ function s2w(sx, sy) { return screenToWorld(sx, sy); }
 // IMPROVED PLAN LABEL (floats above plan boundary)
 // ═══════════════════════════════════════════════════════
 function drawPlanLabel() {
-  const bs = worldToScreen(0, 0);
+  // Compute this plan's elevation
+  let elevM = 0;
+  for (let i = 0; i < state.currentPlan; i++) {
+    const rep = state.plans[i].objects.find(o => ['mass','wall','grid','stair'].includes(o.type));
+    elevM += (rep ? (rep.floors || 4) : 4) * (rep ? (rep.floorH || 3.2) : 3.2);
+  }
+  const elevStr = elevM > 0 ? ` · +${elevM.toFixed(1)}m` : '';
+  const yOff = planOriginY(state.currentPlan);
+  const bs = wts(0, 0, yOff);
   ctx2.save();
-  ctx2.font = `${Math.max(9, 11 * state.zoom)}px DM Sans, sans-serif`;
-  ctx2.fillStyle = 'rgba(0,0,0,0.28)';
-  ctx2.fillText(plan().name + ': ' + plan().subtitle, bs.x + 2, bs.y - 6);
+  ctx2.font = `600 ${Math.max(9, 11 * state.zoom)}px DM Sans, sans-serif`;
+  ctx2.fillStyle = 'rgba(0,0,0,0.38)';
+  ctx2.fillText(plan().name + ' — ' + plan().subtitle + elevStr, bs.x + 2, bs.y - 8);
   ctx2.restore();
 }
 
@@ -2655,7 +3867,7 @@ function seedProject() {
     color: '#ddd9d0', floors: 4, floorH: 3.2 });
   // Stair core
   p0.push({ id: nextId(), type: 'stair',
-    x: 1968, y: 576, w: 192, h: 288 });
+    x: 1968, y: 576, w: 192, h: 288, floors: 4, floorH: 3.2, color: '#c8c0b0' });
 
   // Plan 02 starts empty (ghost of plan 01 shows as reference)
   rebuild3D();
@@ -2834,16 +4046,121 @@ window.addEventListener('mouseup', e => {
 // ═══════════════════════════════════════════════════════
 window.addEventListener('resize', resizeCanvases);
 setTool('rect');
-seedProject();
+// seedProject is called by initAll if no autosave is found
 // Fit both views after layout settles
+// ═══════════════════════════════════════════════════════
+// SAVE / LOAD
+// ═══════════════════════════════════════════════════════
+function projectSnapshot() {
+  return {
+    version: 1,
+    name: document.getElementById('proj-name-btn').textContent,
+    objIdCounter: state.objIdCounter,
+    plans: state.plans.map(p => ({ name: p.name, subtitle: p.subtitle, objects: JSON.parse(JSON.stringify(p.objects)) })),
+    savedViews: JSON.parse(JSON.stringify(state.savedViews || [])),
+  };
+}
+
+function saveProject() {
+  const data = JSON.stringify(projectSnapshot(), null, 2);
+  const blob = new Blob([data], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  const name = (document.getElementById('proj-name-btn').textContent || 'sketcher').replace(/\s+/g,'_');
+  a.download = name + '.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+  // Also save to localStorage
+  try { localStorage.setItem('sketcher_autosave', data); } catch(e) {}
+}
+
+function loadProjectDialog() {
+  document.getElementById('load-file-input').click();
+}
+
+function loadProjectFile(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const data = JSON.parse(e.target.result);
+      applyProjectData(data);
+    } catch(err) { alert('Invalid project file: ' + err.message); }
+  };
+  reader.readAsText(file);
+  input.value = ''; // reset so same file can be reloaded
+}
+
+function applyProjectData(data) {
+  if (!data.plans || !Array.isArray(data.plans)) { alert('Invalid project format.'); return; }
+  state.plans = data.plans.map(p => ({ name: p.name || 'Plan', subtitle: p.subtitle || '', objects: p.objects || [] }));
+  state.objIdCounter = data.objIdCounter || (Math.max(0, ...state.plans.flatMap(p => p.objects.map(o => o.id || 0))) + 1);
+  state.currentPlan = 0;
+  state.selected = null;
+  state.savedViews = data.savedViews || [];
+  if (data.name) document.getElementById('proj-name-btn').textContent = data.name;
+  // Rebuild plan dropdown
+  const sel = document.getElementById('plan-select');
+  sel.innerHTML = '';
+  state.plans.forEach((p, i) => {
+    const opt = document.createElement('option');
+    opt.value = i; opt.textContent = p.name;
+    sel.appendChild(opt);
+  });
+  historySnapshot();
+  draw2D(); rebuild3D(); fit2D();
+  renderSavedViews();
+}
+
+// Autosave to localStorage on changes (debounced)
+let _autosaveTimer = null;
+function scheduleAutosave() {
+  clearTimeout(_autosaveTimer);
+  _autosaveTimer = setTimeout(() => {
+    try { localStorage.setItem('sketcher_autosave', JSON.stringify(projectSnapshot())); } catch(e) {}
+  }, 2000);
+}
+
+// Try to restore from localStorage on first load
+function tryRestoreAutosave() {
+  try {
+    const saved = localStorage.getItem('sketcher_autosave');
+    if (saved) {
+      const data = JSON.parse(saved);
+      if (data.plans && data.plans.some(p => p.objects && p.objects.length > 0)) {
+        applyProjectData(data);
+        return true;
+      }
+    }
+  } catch(e) {}
+  return false;
+}
+
+function rotateSelected(deg) {
+  const obj = objects().find(o => o.id === state.selected);
+  if (!obj || !obj.w || !obj.h) return;
+  historySnapshot();
+  obj.rotation = ((obj.rotation || 0) + deg) % 360;
+  // Swap width/height so footprint stays readable after 90° turns
+  if (deg % 90 === 0 && deg % 180 !== 0) {
+    const cx = obj.x + obj.w / 2, cy = obj.y + obj.h / 2;
+    const tmp = obj.w; obj.w = obj.h; obj.h = tmp;
+    obj.x = cx - obj.w / 2; obj.y = cy - obj.h / 2;
+  }
+  draw2D(); rebuild3D();
+}
+
 function initAll() {
   if (!planCanvas.clientWidth || !planCanvas.clientHeight) {
     requestAnimationFrame(initAll); return;
   }
   resizeCanvases();
   setVPMode('persp');
+  const restored = tryRestoreAutosave();
+  if (!restored) seedProject();
   fit2D();
-  setTimeout(() => { zoomExtents(); }, 100); // after rebuild3D completes
+  setTimeout(() => { zoomExtents(); renderSavedViews(); }, 100);
 }
 requestAnimationFrame(initAll);
 </script>
