@@ -1146,6 +1146,7 @@
   <div class="mod-color-row" data-hex="#c8b84a" onmousedown="setModColor('#c8b84a',this)"><span class="mod-cr-dot" style="background:#c8b84a"></span>Gold</div>
   <div class="mod-color-row" data-hex="#d4836a" onmousedown="setModColor('#d4836a',this)"><span class="mod-cr-dot" style="background:#d4836a"></span>Terracotta</div>
   <div class="mod-color-row" data-hex="#cd9a6a" onmousedown="setModColor('#cd9a6a',this)"><span class="mod-cr-dot" style="background:#cd9a6a"></span>Timber</div>
+  <div class="mod-color-row" data-hex="#d4b896" onmousedown="setModColor('#d4b896',this)"><span class="mod-cr-dot" style="background:#d4b896"></span>Plywood</div>
   <div class="mod-color-row" data-hex="#b87333" onmousedown="setModColor('#b87333',this)"><span class="mod-cr-dot" style="background:#b87333"></span>Corten</div>
   <div class="mod-color-row" data-hex="#e8e5dc" onmousedown="setModColor('#e8e5dc',this)"><span class="mod-cr-dot" style="background:#e8e5dc"></span>Stone</div>
   <div class="mod-color-row" data-hex="#c4a882" onmousedown="setModColor('#c4a882',this)"><span class="mod-cr-dot" style="background:#c4a882"></span>Sand</div>
@@ -1160,7 +1161,6 @@
   <div class="mod-color-row" data-hex="#e8c84a" onmousedown="setModColor('#e8c84a',this)"><span class="mod-cr-dot" style="background:#e8c84a"></span>Yellow</div>
   <div class="mod-color-row" data-hex="#f0f0f0" onmousedown="setModColor('#f0f0f0',this)"><span class="mod-cr-dot" style="background:#f0f0f0"></span>White</div>
   <div class="mod-color-row" data-hex="#a8d8f0" onmousedown="setModColor('#a8d8f0',this)"><span class="mod-cr-dot" style="background:#a8d8f0;border:1px solid rgba(0,0,0,0.12)"></span>Glass</div>
-  <div class="mod-color-row" data-hex="#d4b896" onmousedown="setModColor('#d4b896',this)"><span class="mod-cr-dot" style="background:#d4b896"></span>Plywood</div>
   <div class="mod-color-row" data-hex="none" onmousedown="setModColor('none',this)"><span class="mod-cr-dot" style="background:repeating-linear-gradient(-45deg,#fff,#fff 2px,#ccc 2px,#ccc 4px)"></span>None</div>
 </div>
 
@@ -1170,6 +1170,7 @@
   <div class="mod-color-row" data-hex="#c8b84a" onmousedown="setPlanColor('#c8b84a',this)"><span class="mod-cr-dot" style="background:#c8b84a"></span>Gold</div>
   <div class="mod-color-row" data-hex="#d4836a" onmousedown="setPlanColor('#d4836a',this)"><span class="mod-cr-dot" style="background:#d4836a"></span>Terracotta</div>
   <div class="mod-color-row" data-hex="#cd9a6a" onmousedown="setPlanColor('#cd9a6a',this)"><span class="mod-cr-dot" style="background:#cd9a6a"></span>Timber</div>
+  <div class="mod-color-row" data-hex="#d4b896" onmousedown="setPlanColor('#d4b896',this)"><span class="mod-cr-dot" style="background:#d4b896"></span>Plywood</div>
   <div class="mod-color-row" data-hex="#b87333" onmousedown="setPlanColor('#b87333',this)"><span class="mod-cr-dot" style="background:#b87333"></span>Corten</div>
   <div class="mod-color-row" data-hex="#c4a882" onmousedown="setPlanColor('#c4a882',this)"><span class="mod-cr-dot" style="background:#c4a882"></span>Sand</div>
   <div class="mod-color-row" data-hex="#8e7e6e" onmousedown="setPlanColor('#8e7e6e',this)"><span class="mod-cr-dot" style="background:#8e7e6e"></span>Concrete</div>
@@ -1796,7 +1797,9 @@ let modMarqueeActive = false;
 let modMarqueeStart = null;
 let modMarqueeEnd = null;
 let modMultiDragPending = null;
+let modMultiDrag = null;
 let planClipboard = null; // { sourcePlan, items, pasteCount }
+let modClipboard = null;  // { sourceModule, items, pasteCount }
 
 function plan() { return state.plans[state.currentPlan]; }
 function objects() { return plan().objects; }
@@ -6773,6 +6776,7 @@ function multiSelectionMeta() {
 const CTX_COLOR_PALETTE = [
   { hex: '#e8e5dc', name: 'Stone' }, { hex: '#c8b84a', name: 'Gold' },
   { hex: '#d4836a', name: 'Terracotta' }, { hex: '#cd9a6a', name: 'Timber' },
+  { hex: '#d4b896', name: 'Plywood' },
   { hex: '#b87333', name: 'Corten' }, { hex: '#c4a882', name: 'Sand' },
   { hex: '#8e7e6e', name: 'Concrete' }, { hex: '#a8b8a0', name: 'Grass' },
   { hex: '#b8c4cc', name: 'Aluminium' }, { hex: '#a0b8d0', name: 'Slate' },
@@ -7372,7 +7376,8 @@ const COLORS_NAMED = [
   {hex:'#7aabcd',name:'Sky'     },{hex:'#8fc47a',name:'Sage'},
   {hex:'#c47ab0',name:'Rose'    },{hex:'#cd9a6a',name:'Sand'},
   {hex:'#6a8bcd',name:'Slate'   },{hex:'#c8c8c8',name:'Silver'},
-  {hex:'#8b6c52',name:'Timber'  },{hex:'#2d2d2d',name:'Charcoal'},
+  {hex:'#8b6c52',name:'Timber'  },{hex:'#d4b896',name:'Plywood'},
+  {hex:'#2d2d2d',name:'Charcoal'},
 ];
 
 function showObjPopup(obj, sx, sy) {
@@ -8181,6 +8186,104 @@ function clonePlanObject(obj, dx, dy) {
   return copy;
 }
 
+function modNextIdFor(mod) {
+  if (!mod) return 1;
+  return ((mod.shapes || []).reduce((m, s) => Math.max(m, s.id || 0), 0)) + 1;
+}
+
+function modShapesForCopy() {
+  const mod = state.modules[state.currentModule];
+  if (!mod) return [];
+  const shapes = mod.shapes || [];
+  if (modMultiSelected.length > 0) {
+    return shapes.filter(s => modMultiSelected.includes(s.id));
+  }
+  if (state.modSelectedShape != null) {
+    const sh = shapes.find(s => s.id === state.modSelectedShape);
+    return sh ? [sh] : [];
+  }
+  return [];
+}
+
+function modPasteOffset() {
+  modClipboard.pasteCount = (modClipboard.pasteCount || 0) + 1;
+  const sameMod = state.currentModule === modClipboard.sourceModule;
+  if (!sameMod && modClipboard.pasteCount === 1) return { dx: 0, dy: 0 };
+  const step = 0.2 * modClipboard.pasteCount;
+  return { dx: step, dy: step };
+}
+
+function cloneModShape(sh, dx, dy, mod, newId) {
+  const copy = JSON.parse(JSON.stringify(sh));
+  copy.id = newId;
+  const maxX = copy.view === 'side' ? 2.0 : mod.w;
+  const maxH = mod.h;
+
+  if (copy.type === 'circle') {
+    copy.cx += dx;
+    copy.cy += dy;
+    clampModCircle(copy, mod);
+  } else if (copy.type === 'line') {
+    copy.x1 += dx; copy.y1 += dy;
+    copy.x2 += dx; copy.y2 += dy;
+    const maxXLine = copy.view === 'side' ? 2.0 : mod.w;
+    copy.x1 = Math.max(0, Math.min(maxXLine, copy.x1));
+    copy.y1 = Math.max(0, Math.min(maxH, copy.y1));
+    copy.x2 = Math.max(0, Math.min(maxXLine, copy.x2));
+    copy.y2 = Math.max(0, Math.min(maxH, copy.y2));
+  } else if (copy.type === 'polyline' && copy.pts?.length) {
+    let pts = copy.pts.map(p => ({ x: p.x + dx, y: p.y + dy }));
+    const xs = pts.map(p => p.x), ys = pts.map(p => p.y);
+    const minX = Math.min(...xs), maxXp = Math.max(...xs);
+    const minY = Math.min(...ys), maxYp = Math.max(...ys);
+    const dxC = Math.max(-minX, Math.min(maxX - maxXp, 0));
+    const dyC = Math.max(-minY, Math.min(maxH - maxYp, 0));
+    copy.pts = pts.map(p => ({ x: p.x + dxC, y: p.y + dyC }));
+  } else if (copy.x != null) {
+    copy.x += dx;
+    copy.y += dy;
+    copy.x = Math.max(0, Math.min(maxX - (copy.w || 0), copy.x));
+    copy.y = Math.max(0, Math.min(maxH - (copy.h || 0), copy.y));
+  }
+  return copy;
+}
+
+function copyModSelected() {
+  const items = modShapesForCopy();
+  if (!items.length) return false;
+  modClipboard = {
+    sourceModule: state.currentModule,
+    items: items.map(s => JSON.parse(JSON.stringify(s))),
+    pasteCount: 0,
+  };
+  planClipboard = null;
+  return true;
+}
+
+function pasteModSelected() {
+  if (!modClipboard?.items?.length || state.currentModule == null) return false;
+  const mod = state.modules[state.currentModule];
+  if (!mod) return false;
+  historySnapshot();
+  const { dx, dy } = modPasteOffset();
+  const newIds = [];
+  let nextId = modNextIdFor(mod);
+  modClipboard.items.forEach(item => {
+    const copy = cloneModShape(item, dx, dy, mod, nextId++);
+    mod.shapes.push(copy);
+    newIds.push(copy.id);
+  });
+  modMultiSelected = newIds;
+  state.modSelectedShape = newIds[newIds.length - 1] || null;
+  const sh = (mod.shapes || []).find(s => s.id === state.modSelectedShape);
+  if (sh) showModCtxToolbar(sh);
+  else hideModCtxToolbar();
+  draw2D();
+  rebuild3D();
+  updateModHandles();
+  return true;
+}
+
 function pasteOffsetForClipboard() {
   if (!planClipboard) return { dx: 0, dy: 0 };
   planClipboard.pasteCount = (planClipboard.pasteCount || 0) + 1;
@@ -8191,6 +8294,7 @@ function pasteOffsetForClipboard() {
 }
 
 function copySelected() {
+  if (copyModSelected()) return;
   const items = objectsForCopy();
   if (!items.length) return;
   planClipboard = {
@@ -8198,9 +8302,11 @@ function copySelected() {
     items: items.map(o => JSON.parse(JSON.stringify(o))),
     pasteCount: 0,
   };
+  modClipboard = null;
 }
 
 function pasteSelected() {
+  if (pasteModSelected()) return;
   if (!planClipboard?.items?.length) return;
   historySnapshot();
   const { dx, dy } = pasteOffsetForClipboard();
@@ -11224,6 +11330,7 @@ function drawModuleSheets() {
       const sw3 = sh.w * PX_PER_M * state.zoom;
       const sh3b = sh.h * PX_PER_M * state.zoom;
       const sel3 = isCur && modShapeIsSelected(sh);
+      const multiOnly3 = modMultiSelected.includes(sh.id) && sh.id !== state.modSelectedShape;
       const isSolid3 = (sh.fill !== 'frame');
       if (isSolid3) {
         ctx2.fillStyle = col; ctx2.globalAlpha = 0.85;
@@ -11249,9 +11356,9 @@ function drawModuleSheets() {
       ctx2.strokeStyle = col; ctx2.lineWidth = 1.2;
       ctx2.strokeRect(sx3, sy3, sw3, sh3b);
       if (sel3) {
-        ctx2.strokeStyle = '#2a6dd4'; ctx2.lineWidth = 1.5; ctx2.setLineDash([3,2]);
+        ctx2.strokeStyle = multiOnly3 ? '#e07820' : '#2a6dd4'; ctx2.lineWidth = 1.5; ctx2.setLineDash([3,2]);
         ctx2.strokeRect(sx3-1, sy3-1, sw3+2, sh3b+2); ctx2.setLineDash([]);
-        if (state.zoom > 0.3) {
+        if (state.zoom > 0.3 && !multiOnly3) {
           ctx2.font = '10px DM Mono,monospace'; ctx2.fillStyle = '#2a6dd4';
           ctx2.textAlign = 'center'; ctx2.textBaseline = 'top';
           ctx2.fillText((sh.w||0).toFixed(2)+'m', sx3+sw3/2, sy3+sh3b+5);
@@ -11320,7 +11427,7 @@ function drawModuleSheets() {
       ctx2.beginPath(); ctx2.arc(cxPx, cyPx, rPx, 0, Math.PI*2); ctx2.stroke();
 
       if (sel) {
-        ctx2.strokeStyle = '#2a6dd4'; ctx2.lineWidth = 1.5; ctx2.setLineDash([3,2]);
+        ctx2.strokeStyle = multiOnly ? '#e07820' : '#2a6dd4'; ctx2.lineWidth = 1.5; ctx2.setLineDash([3,2]);
         ctx2.beginPath(); ctx2.arc(cxPx, cyPx, rPx+1, 0, Math.PI*2); ctx2.stroke();
         ctx2.setLineDash([]);
       }
@@ -11413,17 +11520,18 @@ function drawModuleSheets() {
         }
       }
 
-      // Draggable point handles for selected polylines (select tool only)
-      if (sel && state.tool === 'select' && !modPencilStart) {
+      // Draggable point handles for selected polylines (single selection only)
+      if (sel && state.tool === 'select' && !modPencilStart && modMultiSelected.length <= 1) {
         spts.forEach(p => {
           ctx2.fillStyle = '#fff'; ctx2.strokeStyle = '#2a6dd4'; ctx2.lineWidth = 1.5;
           ctx2.fillRect(p.x-5, p.y-5, 10, 10); ctx2.strokeRect(p.x-5, p.y-5, 10, 10);
         });
-        // Dashed selection outline
+      }
+      if (sel && !modPencilStart) {
         ctx2.beginPath();
         spts.forEach((p, i) => i === 0 ? ctx2.moveTo(p.x, p.y) : ctx2.lineTo(p.x, p.y));
         if (sh.closed) ctx2.closePath();
-        ctx2.strokeStyle = '#2a6dd4'; ctx2.lineWidth = 1.2; ctx2.setLineDash([3,2]); ctx2.stroke(); ctx2.setLineDash([]);
+        ctx2.strokeStyle = multiOnly ? '#e07820' : '#2a6dd4'; ctx2.lineWidth = 1.2; ctx2.setLineDash([3,2]); ctx2.stroke(); ctx2.setLineDash([]);
       }
 
       // In-progress: draw point dots with close-snap indicator
@@ -11495,14 +11603,17 @@ function drawModuleSheets() {
       ctx2.strokeStyle = col; ctx2.lineWidth = Math.max(1.5, halfOff*2); ctx2.lineCap='square';
       ctx2.beginPath(); ctx2.moveTo(ax, ay); ctx2.lineTo(bx, by); ctx2.stroke();
       if (sel) {
-        ctx2.strokeStyle = '#2a6dd4'; ctx2.lineWidth = 1.5; ctx2.setLineDash([3,2]);
+        const selCol = multiOnly ? '#e07820' : '#2a6dd4';
+        ctx2.strokeStyle = selCol; ctx2.lineWidth = 1.5; ctx2.setLineDash([3,2]);
         ctx2.beginPath(); ctx2.moveTo(ax, ay); ctx2.lineTo(bx, by); ctx2.stroke();
         ctx2.setLineDash([]);
-        ctx2.fillStyle = '#fff'; ctx2.strokeStyle = '#2a6dd4'; ctx2.lineWidth = 1.2;
-        [[ax,ay],[bx,by]].forEach(([hx,hy])=>{ ctx2.fillRect(hx-5,hy-5,10,10); ctx2.strokeRect(hx-5,hy-5,10,10); });
-        const lenM = Math.hypot(sh.x2-sh.x1, sh.y2-sh.y1).toFixed(1)+'m';
-        ctx2.font='10px DM Mono,monospace'; ctx2.fillStyle='#2a6dd4'; ctx2.textAlign='center'; ctx2.textBaseline='bottom';
-        ctx2.fillText(lenM, (ax+bx)/2, Math.min(ay,by)-4);
+        if (modMultiSelected.length <= 1) {
+          ctx2.fillStyle = '#fff'; ctx2.strokeStyle = selCol; ctx2.lineWidth = 1.2;
+          [[ax,ay],[bx,by]].forEach(([hx,hy])=>{ ctx2.fillRect(hx-5,hy-5,10,10); ctx2.strokeRect(hx-5,hy-5,10,10); });
+          const lenM = Math.hypot(sh.x2-sh.x1, sh.y2-sh.y1).toFixed(1)+'m';
+          ctx2.font='10px DM Mono,monospace'; ctx2.fillStyle=selCol; ctx2.textAlign='center'; ctx2.textBaseline='bottom';
+          ctx2.fillText(lenM, (ax+bx)/2, Math.min(ay,by)-4);
+        }
       }
       ctx2.restore();
     });
@@ -12049,7 +12160,8 @@ let _overlayStructureKey = '';
 
 function _getStructureKey() {
   const planKey = state.plans.map((p,i) => i + ':' + p.objects.map(o =>
-    o.id + (o.cols != null ? `g${o.cols}x${o.rows||1}` : '')
+    o.id + (o.cols != null ? `g${o.cols}x${o.rows||1}` : '') +
+    (o.type === 'fgrid' && o.edgePoly?.length ? `e${o.edgePoly.length}` : '')
   ).join(',')).join(',');
   const modKey  = (state.modules||[]).map(m => m.id + ':' + (m.connectors||[]).map(c => connPlanIdx(c)+'/'+c.faceDir).join(',')).join(',');
   const selKey  = state.selected + '|' + state.currentPlan + '|' + state.currentModule + '|' + (state.mode||'') + '|' + state.plans.length;
@@ -13988,6 +14100,7 @@ function updateModHandles() {
   // Hide all first
   if (state.currentModule == null ||
       state.modSelectedShape == null ||
+      modMultiSelected.length > 1 ||
       edgeEditState) {
     hideAll();
     return;
@@ -14096,12 +14209,14 @@ window.addEventListener('mouseup', () => {
 // ── Module Backspace/Delete + undo wired globally ────
 window.addEventListener('keydown', function(e) {
   if (['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName)) return;
-  if ((e.code==='Delete'||e.code==='Backspace') && state.modSelectedShape!=null) {
+  if ((e.code==='Delete'||e.code==='Backspace') && (state.modSelectedShape!=null || modMultiSelected.length)) {
     const mod = state.modules[state.currentModule];
     if (mod) {
       e.preventDefault();
       historySnapshot();
-      mod.shapes = (mod.shapes||[]).filter(s => s.id!==state.modSelectedShape);
+      const ids = modMultiSelected.length ? [...modMultiSelected] : [state.modSelectedShape];
+      mod.shapes = (mod.shapes||[]).filter(s => !ids.includes(s.id));
+      clearModMultiSelection();
       state.modSelectedShape = null;
       hideModCtxToolbar();
       document.querySelectorAll('.mod-shape-handle').forEach(el => el.style.display = 'none');
@@ -14654,7 +14769,7 @@ function collectModSnapEdges(modIdx, view, excludeShapeId) {
 }
 
 function updateModHoverSnap(sx, sy) {
-  if (spaceDown || state.panning || modHandleDrag || modShapeDrag) {
+  if (spaceDown || state.panning || modHandleDrag || modShapeDrag || modMultiDrag) {
     lastModSnap = null;
     return;
   }
@@ -14803,11 +14918,110 @@ function modShapeIsSelected(sh) {
   return sh.id === state.modSelectedShape || modMultiSelected.includes(sh.id);
 }
 
+function modPointInShape(sh, mx, my, options) {
+  const opt = options || {};
+  const view = opt.view;
+  const multiDrag = !!opt.multiDrag;
+  if (view != null) {
+    const onView = view === 'side' ? sh.view === 'side' : sh.view !== 'side';
+    if (!onView) return false;
+  }
+  const BORDER_M = 0.15;
+  const LINE_M = opt.lineProx ?? (view === 'side' ? 0.25 : 0.20);
+  const PROX = opt.polyProx ?? (view === 'side' ? 0.25 : 0.20);
+
+  if (sh.type === 'circle') {
+    return Math.hypot(mx - sh.cx, my - sh.cy) <= sh.r + 0.05;
+  }
+  if (sh.type === 'line') {
+    const dx = sh.x2 - sh.x1, dy = sh.y2 - sh.y1, len2 = dx * dx + dy * dy;
+    if (len2 < 0.0001) return false;
+    const t = Math.max(0, Math.min(1, ((mx - sh.x1) * dx + (my - sh.y1) * dy) / len2));
+    return Math.hypot(mx - (sh.x1 + t * dx), my - (sh.y1 + t * dy)) < LINE_M;
+  }
+  if (sh.type === 'polyline' && sh.pts?.length >= 2) {
+    if (sh.closed && sh.fill !== 'frame') {
+      let inside = false;
+      for (let j = 0, k = sh.pts.length - 1; j < sh.pts.length; k = j++) {
+        const xi = sh.pts[j].x, yi = sh.pts[j].y;
+        const xj = sh.pts[k].x, yj = sh.pts[k].y;
+        if (((yi > my) !== (yj > my)) &&
+            (mx < (xj - xi) * (my - yi) / ((yj - yi) || 1e-9) + xi)) inside = !inside;
+      }
+      if (inside) return true;
+    }
+    for (let j = 0; j < sh.pts.length - (sh.closed ? 0 : 1); j++) {
+      const a = sh.pts[j], b = sh.pts[(j + 1) % sh.pts.length];
+      const dx = b.x - a.x, dy = b.y - a.y, len2 = dx * dx + dy * dy;
+      if (len2 < 0.0001) continue;
+      const t = Math.max(0, Math.min(1, ((mx - a.x) * dx + (my - a.y) * dy) / len2));
+      if (Math.hypot(mx - (a.x + t * dx), my - (a.y + t * dy)) < PROX) return true;
+    }
+    return false;
+  }
+  if (sh.type === 'rect' || sh.type === 'void' || sh.type === 'mass') {
+    if (mx < sh.x - BORDER_M || mx > sh.x + sh.w + BORDER_M) return false;
+    if (my < sh.y - BORDER_M || my > sh.y + sh.h + BORDER_M) return false;
+    if (multiDrag || sh.fill !== 'frame') {
+      return mx >= sh.x && mx <= sh.x + sh.w && my >= sh.y && my <= sh.y + sh.h;
+    }
+    const nearL = Math.abs(mx - sh.x) <= BORDER_M;
+    const nearR = Math.abs(mx - (sh.x + sh.w)) <= BORDER_M;
+    const nearT = Math.abs(my - sh.y) <= BORDER_M;
+    const nearB = Math.abs(my - (sh.y + sh.h)) <= BORDER_M;
+    return nearL || nearR || nearT || nearB;
+  }
+  return false;
+}
+
+function modCollectHitsAt(mod, mx, my, view) {
+  const hits = [];
+  for (let i = (mod.shapes || []).length - 1; i >= 0; i--) {
+    const sh = mod.shapes[i];
+    if (modPointInShape(sh, mx, my, { view })) hits.push(sh);
+  }
+  return hits;
+}
+
+function modPickHitForSelect(hits, shiftAdd) {
+  if (!hits.length) return null;
+  if (shiftAdd) {
+    return hits.find(sh => !modMultiSelected.includes(sh.id) && sh.id !== state.modSelectedShape)
+      || hits.find(sh => !modMultiSelected.includes(sh.id))
+      || hits[0];
+  }
+  const cur = hits.find(sh => sh.id === state.modSelectedShape);
+  return cur || hits[0];
+}
+
+function modHitTestSelectedAt(mod, mx, my, view) {
+  for (let i = (mod.shapes || []).length - 1; i >= 0; i--) {
+    const sh = mod.shapes[i];
+    if (!modMultiSelected.includes(sh.id)) continue;
+    if (modPointInShape(sh, mx, my, { view, multiDrag: true })) return sh;
+  }
+  return null;
+}
+
+function tryStartModMultiDragEarly(e, sx, sy, hit, pos, viewRect) {
+  if (isShiftAdd(e) || spaceDown || modMultiSelected.length <= 1) return false;
+  const mod = state.modules[hit.modIdx];
+  if (!mod || !modHitTestSelectedAt(mod, pos.mx, pos.my, hit.view)) return false;
+  historySnapshot();
+  startModMultiDrag(hit.modIdx, hit.view, viewRect, sx, sy, pos.mx, pos.my, e.altKey);
+  draw2D();
+  updateModHandles();
+  return true;
+}
+
 function modApplyClickSelection(hitSh, shiftAdd) {
   if (hitSh && shiftAdd) {
-    const i = modMultiSelected.indexOf(hitSh.id);
-    if (i >= 0) modMultiSelected.splice(i, 1);
-    else modMultiSelected.push(hitSh.id);
+    if (state.modSelectedShape && !modMultiSelected.includes(state.modSelectedShape)) {
+      modMultiSelected.push(state.modSelectedShape);
+    }
+    if (!modMultiSelected.includes(hitSh.id)) {
+      modMultiSelected.push(hitSh.id);
+    }
     state.modSelectedShape = hitSh.id;
     showModCtxToolbar(hitSh);
   } else if (hitSh) {
@@ -14819,6 +15033,132 @@ function modApplyClickSelection(hitSh, shiftAdd) {
     state.modSelectedShape = null;
     hideModCtxToolbar();
   }
+}
+
+function storeModDragOrigin(sh) {
+  if (sh.type === 'circle') return { type: 'circle', cx: sh.cx, cy: sh.cy, r: sh.r };
+  if (sh.type === 'line') return { type: 'line', x1: sh.x1, y1: sh.y1, x2: sh.x2, y2: sh.y2 };
+  if (sh.type === 'polyline' && sh.pts) return { type: 'polyline', pts: sh.pts.map(p => ({ x: p.x, y: p.y })) };
+  if (sh.x != null && sh.type !== 'circle') return { type: 'rect', x: sh.x, y: sh.y, w: sh.w, h: sh.h };
+  return null;
+}
+
+function applyModDragDelta(sh, orig, dx, dy, mod, view) {
+  if (!orig) return;
+  const maxX = view === 'side' ? 2.0 : mod.w;
+  if (orig.type === 'circle') {
+    sh.cx = Math.max(0, Math.min(maxX, orig.cx + dx));
+    sh.cy = Math.max(0, Math.min(mod.h, orig.cy + dy));
+    clampModCircle(sh, mod);
+  } else if (orig.type === 'line') {
+    sh.x1 = Math.max(0, Math.min(mod.w, orig.x1 + dx));
+    sh.y1 = Math.max(0, Math.min(mod.h, orig.y1 + dy));
+    sh.x2 = Math.max(0, Math.min(mod.w, orig.x2 + dx));
+    sh.y2 = Math.max(0, Math.min(mod.h, orig.y2 + dy));
+  } else if (orig.type === 'polyline') {
+    const xs = orig.pts.map(p => p.x), ys = orig.pts.map(p => p.y);
+    const minX = Math.min(...xs), maxXp = Math.max(...xs);
+    const minY = Math.min(...ys), maxYp = Math.max(...ys);
+    const dxC = Math.max(-minX, Math.min(maxX - maxXp, dx));
+    const dyC = Math.max(-minY, Math.min(mod.h - maxYp, dy));
+    sh.pts = orig.pts.map(p => ({ x: p.x + dxC, y: p.y + dyC }));
+  } else if (orig.type === 'rect') {
+    sh.x = Math.max(0, Math.min(maxX - (orig.w || sh.w || 0), orig.x + dx));
+    sh.y = Math.max(0, Math.min(mod.h - (orig.h || sh.h || 0), orig.y + dy));
+  }
+}
+
+function startModMultiDrag(modIdx, view, viewRect, sx, sy, grabMx, grabMy, altCopy) {
+  const mod = state.modules[modIdx];
+  if (!mod) return;
+  const origins = {};
+  if (altCopy) {
+    const newIds = [];
+    modMultiSelected.forEach(id => {
+      const src = (mod.shapes || []).find(s => s.id === id);
+      if (!src) return;
+      const copy = JSON.parse(JSON.stringify(src));
+      copy.id = modNextId2();
+      mod.shapes.push(copy);
+      newIds.push(copy.id);
+      origins[copy.id] = storeModDragOrigin(copy);
+    });
+    modMultiSelected = newIds;
+    state.modSelectedShape = newIds[newIds.length - 1] || null;
+    const sh = (mod.shapes || []).find(s => s.id === state.modSelectedShape);
+    if (sh) showModCtxToolbar(sh);
+  } else {
+    modMultiSelected.forEach(id => {
+      const sh = (mod.shapes || []).find(s => s.id === id);
+      if (sh) origins[id] = storeModDragOrigin(sh);
+    });
+  }
+  modMultiDrag = { modIdx, view, viewRect, grabMx, grabMy, origins };
+  modShapeDrag = null;
+  modMultiDragPending = null;
+}
+
+function handleModSelectResult(e, sx, sy, hit, hitSh, pos, dragType, viewRect) {
+  const mod = state.modules[hit.modIdx];
+  const shiftAdd = isShiftAdd(e);
+
+  if (shiftAdd && hitSh) {
+    modApplyClickSelection(hitSh, true);
+    modMultiDragPending = { sx, sy, modIdx: hit.modIdx, view: hit.view, viewRect, grabMx: pos.mx, grabMy: pos.my, altKey: e.altKey };
+    modShapeDrag = null;
+    modMultiDrag = null;
+    draw2D();
+    updateModHandles();
+    return;
+  }
+
+  if (hitSh && modMultiSelected.includes(hitSh.id) && modMultiSelected.length > 1) {
+    historySnapshot();
+    startModMultiDrag(hit.modIdx, hit.view, viewRect, sx, sy, pos.mx, pos.my, e.altKey);
+    draw2D();
+    updateModHandles();
+    return;
+  }
+
+  if (hitSh) {
+    historySnapshot();
+    if (e.altKey) {
+      const copy = JSON.parse(JSON.stringify(hitSh));
+      copy.id = modNextId2();
+      mod.shapes.push(copy);
+      hitSh = copy;
+    }
+    modMultiSelected = [hitSh.id];
+    state.modSelectedShape = hitSh.id;
+    showModCtxToolbar(hitSh);
+    modMultiDrag = null;
+    modMultiDragPending = null;
+    modShapeDrag = {
+      type: dragType, shapeId: hitSh.id, modIdx: hit.modIdx,
+      startSx: sx, startSy: sy,
+      grabMx: pos.mx, grabMy: pos.my,
+      origX: hitSh.x, origY: hitSh.y, origW: hitSh.w, origH: hitSh.h,
+      origX1: hitSh.x1, origY1: hitSh.y1, origX2: hitSh.x2, origY2: hitSh.y2,
+      origPts: hitSh.pts ? hitSh.pts.map(p => ({ x: p.x, y: p.y })) : null,
+      origCx: hitSh.cx, origCy: hitSh.cy,
+      viewRect,
+    };
+    draw2D();
+    updateModHandles();
+    return;
+  }
+
+  if (!shiftAdd) {
+    clearModMultiSelection();
+    state.modSelectedShape = null;
+    hideModCtxToolbar();
+  }
+  modShapeDrag = null;
+  modMultiDrag = null;
+  modMultiDragPending = null;
+  startModMarquee(sx, sy, hit.modIdx, hit.view, viewRect, shiftAdd);
+  draw2D();
+  updateModHandles();
 }
 
 function startModMarquee(sx, sy, modIdx, view, viewRect, add) {
@@ -14900,6 +15240,7 @@ function finishModMarquee() {
     .map(sh => sh.id);
   if (modMarqueeStart.add) {
     const set = new Set(modMultiSelected);
+    if (state.modSelectedShape) set.add(state.modSelectedShape);
     picked.forEach(id => set.add(id));
     modMultiSelected = [...set];
   } else {
@@ -14960,221 +15301,87 @@ function finishModMarquee() {
     if (state.tool === 'select') {
       if (hit.view === 'side') {
         const pos = screenToViewM(sx, sy, rects.side);
+        if (tryStartModMultiDragEarly(e, sx, sy, hit, pos, rects.side)) return;
+
         let hitSh = null;
         const PROX = 0.25;
 
-        // Point drag on selected polyline (highest priority)
-        // Unified hit test — reverse draw order, top-most wins
-        for (let i = (mod.shapes||[]).length - 1; i >= 0; i--) {
-          const sh = mod.shapes[i];
-          if (sh.view !== 'side') continue;
+        // Point drag on selected polyline (single selection only)
+        if (modMultiSelected.length <= 1 && state.modSelectedShape) {
+          const selPoly = (mod.shapes || []).find(s => s.id === state.modSelectedShape && s.view === 'side' && s.type === 'polyline');
+          if (selPoly?.pts?.length >= 2) {
+            const PT_R2 = 0.2;
+            let ptHit = -1;
+            for (let pi = 0; pi < selPoly.pts.length; pi++) {
+              const pt = selPoly.pts[pi];
+              if (Math.hypot(pos.mx - pt.x, pos.my - pt.y) < PT_R2) { ptHit = pi; break; }
+            }
+            if (ptHit >= 0) {
+              modShapeDrag = {
+                type: 'poly-pt', shapeId: selPoly.id, ptIdx: ptHit,
+                modIdx: hit.modIdx, startSx: sx, startSy: sy,
+                origPx: selPoly.pts[ptHit].x, origPy: selPoly.pts[ptHit].y,
+                grabMx: pos.mx, grabMy: pos.my,
+                viewRect: rects.side,
+              };
+              draw2D(); return;
+            }
+          }
+        }
 
-          if (sh.type === 'circle') {
-            if (Math.hypot(pos.mx - sh.cx, pos.my - sh.cy) <= sh.r + 0.05) { hitSh = sh; break; }
-          } else if (sh.type === 'polyline' && sh.pts?.length >= 2) {
-            // If this polyline is the currently selected one, check for point grab first
-            if (sh.id === state.modSelectedShape) {
-              const PT_R2 = 0.2;
-              let ptHit = -1;
-              for (let pi = 0; pi < sh.pts.length; pi++) {
-                const pt = sh.pts[pi];
-                if (Math.hypot(pos.mx - pt.x, pos.my - pt.y) < PT_R2) { ptHit = pi; break; }
-              }
-              if (ptHit >= 0) {
-                modShapeDrag = {
-                  type: 'poly-pt', shapeId: sh.id, ptIdx: ptHit,
-                  modIdx: hit.modIdx, startSx: sx, startSy: sy,
-                  origPx: sh.pts[ptHit].x, origPy: sh.pts[ptHit].y,
-                  grabMx: pos.mx, grabMy: pos.my,
-                  viewRect: rects.side,
-                };
-                draw2D(); return;
-              }
-            }
-            let hit2 = false;
-            if (sh.closed && sh.fill !== 'frame') {
-              let inside = false;
-              for (let j = 0, k = sh.pts.length-1; j < sh.pts.length; k = j++) {
-                const xi = sh.pts[j].x, yi = sh.pts[j].y;
-                const xj = sh.pts[k].x, yj = sh.pts[k].y;
-                if (((yi > pos.my) !== (yj > pos.my)) &&
-                    (pos.mx < (xj - xi) * (pos.my - yi) / ((yj - yi) || 1e-9) + xi)) inside = !inside;
-              }
-              if (inside) hit2 = true;
-            }
-            if (!hit2) {
-              for (let j = 0; j < sh.pts.length - (sh.closed ? 0 : 1); j++) {
-                const a = sh.pts[j], b = sh.pts[(j+1) % sh.pts.length];
-                const dx = b.x-a.x, dy = b.y-a.y, len2 = dx*dx+dy*dy;
-                if (len2 < 0.0001) continue;
-                const t = Math.max(0, Math.min(1, ((pos.mx-a.x)*dx + (pos.my-a.y)*dy)/len2));
-                if (Math.hypot(pos.mx-(a.x+t*dx), pos.my-(a.y+t*dy)) < PROX) { hit2 = true; break; }
-              }
-            }
-            if (hit2) { hitSh = sh; break; }
-          } else if (sh.type === 'rect') {
-            if (pos.mx >= sh.x && pos.mx <= sh.x+sh.w &&
-                pos.my >= sh.y && pos.my <= sh.y+sh.h) {
-              hitSh = sh; break;
-            }
-          }
-        }
-        modApplyClickSelection(hitSh, isShiftAdd(e));
-        if (hitSh) {
-          historySnapshot();
-          if (e.altKey) {
-            const dup = JSON.parse(JSON.stringify(hitSh));
-            dup.id = modNextId2();
-            mod.shapes.push(dup);
-            hitSh = dup;
-            state.modSelectedShape = dup.id;
-            modMultiSelected = [dup.id];
-            showModCtxToolbar(dup);
-          }
-          modShapeDrag = {
-            type: 'rect-move', shapeId: hitSh.id, modIdx: hit.modIdx,
-            startSx: sx, startSy: sy,
-            grabMx: pos.mx, grabMy: pos.my,
-            origX: hitSh.x, origY: hitSh.y, origW: hitSh.w, origH: hitSh.h,
-            origPts: hitSh.pts ? hitSh.pts.map(p => ({x:p.x, y:p.y})) : null, origCx: hitSh.cx, origCy: hitSh.cy,
-            viewRect: rects.side,
-          };
-        } else {
-          modShapeDrag = null;
-          const vr = rects.side;
-          startModMarquee(sx, sy, hit.modIdx, hit.view, vr, isShiftAdd(e));
-        }
-        draw2D(); updateModHandles();
+        const sideHits = modCollectHitsAt(mod, pos.mx, pos.my, 'side');
+        hitSh = modPickHitForSelect(sideHits, isShiftAdd(e));
+        handleModSelectResult(e, sx, sy, hit, hitSh, pos, 'rect-move', rects.side);
         return;
       }
 
       if (hit.view === 'front') {
         const pos = screenToViewM(sx, sy, rects.front);
-        const BORDER_M = 0.15; // border hit zone for rects (metres)
-        const LINE_M   = 0.20; // proximity for lines (metres)
-        const EP_R     = 0.25; // endpoint grab radius (metres)
+        if (tryStartModMultiDragEarly(e, sx, sy, hit, pos, rects.front)) return;
+
+        const EP_R = 0.25;
         let hitSh = null;
         let dragType = 'rect-move';
 
-        // 1. Endpoint grab on already-selected line (highest priority)
-        if (state.modSelectedShape) {
-          const sel = (mod.shapes||[]).find(s => s.id === state.modSelectedShape && s.type === 'line');
+        // Endpoint grab on already-selected line (single selection only)
+        if (modMultiSelected.length <= 1 && state.modSelectedShape) {
+          const sel = (mod.shapes || []).find(s => s.id === state.modSelectedShape && s.type === 'line');
           if (sel) {
-            if (Math.hypot(pos.mx-sel.x1, pos.my-sel.y1) < EP_R) { hitSh=sel; dragType='line-ep1'; }
-            else if (Math.hypot(pos.mx-sel.x2, pos.my-sel.y2) < EP_R) { hitSh=sel; dragType='line-ep2'; }
+            if (Math.hypot(pos.mx - sel.x1, pos.my - sel.y1) < EP_R) { hitSh = sel; dragType = 'line-ep1'; }
+            else if (Math.hypot(pos.mx - sel.x2, pos.my - sel.y2) < EP_R) { hitSh = sel; dragType = 'line-ep2'; }
           }
         }
 
-        // 2. Unified hit test: walk shapes in reverse draw order (top-most first)
-        // Each shape tested with its appropriate hit logic
-        if (!hitSh) {
-          for (let i = (mod.shapes||[]).length - 1; i >= 0; i--) {
-            const sh = mod.shapes[i];
-            if (sh.view === 'side') continue; // front view only
-
-            if (sh.type === 'line') {
-              const dx = sh.x2-sh.x1, dy = sh.y2-sh.y1, len2 = dx*dx+dy*dy;
-              if (len2 < 0.0001) continue;
-              const t = Math.max(0, Math.min(1, ((pos.mx-sh.x1)*dx + (pos.my-sh.y1)*dy)/len2));
-              if (Math.hypot(pos.mx-(sh.x1+t*dx), pos.my-(sh.y1+t*dy)) < LINE_M) {
-                hitSh = sh; dragType = 'line-move'; break;
-              }
-            } else if (sh.type === 'circle') {
-              // Circle: hit if within radius (with small halo)
-              if (Math.hypot(pos.mx - sh.cx, pos.my - sh.cy) <= sh.r + 0.05) {
-                hitSh = sh; dragType = 'rect-move'; break;
-              }
-            } else if (sh.type === 'polyline') {
-              if (!sh.pts?.length) continue;
-              // If this polyline is currently selected, allow point-drag
-              if (sh.id === state.modSelectedShape) {
-                const PT_R = 0.2;
-                let ptHit = -1;
-                for (let pi = 0; pi < sh.pts.length; pi++) {
-                  const pt = sh.pts[pi];
-                  if (Math.hypot(pos.mx - pt.x, pos.my - pt.y) < PT_R) { ptHit = pi; break; }
-                }
-                if (ptHit >= 0) {
-                  modShapeDrag = {
-                    type: 'poly-pt', shapeId: sh.id, ptIdx: ptHit,
-                    modIdx: hit.modIdx, startSx: sx, startSy: sy,
-                    origPx: sh.pts[ptHit].x, origPy: sh.pts[ptHit].y,
-                    grabMx: pos.mx, grabMy: pos.my,
-                    viewRect: rects.front,
-                  };
-                  draw2D(); return;
-                }
-              }
-              let hit2 = false;
-              // Closed polygon: interior hit if not frame
-              if (sh.closed && sh.fill !== 'frame') {
-                // Point-in-polygon ray cast
-                let inside = false;
-                for (let j = 0, k = sh.pts.length-1; j < sh.pts.length; k = j++) {
-                  const xi = sh.pts[j].x, yi = sh.pts[j].y;
-                  const xj = sh.pts[k].x, yj = sh.pts[k].y;
-                  if (((yi > pos.my) !== (yj > pos.my)) &&
-                      (pos.mx < (xj - xi) * (pos.my - yi) / ((yj - yi) || 1e-9) + xi)) inside = !inside;
-                }
-                if (inside) hit2 = true;
-              }
-              // Edge proximity for open polylines OR frame closed
-              if (!hit2) {
-                for (let j = 0; j < sh.pts.length - (sh.closed ? 0 : 1); j++) {
-                  const a = sh.pts[j], b = sh.pts[(j+1) % sh.pts.length];
-                  const dx = b.x-a.x, dy = b.y-a.y, len2 = dx*dx+dy*dy;
-                  if (len2 < 0.0001) continue;
-                  const t = Math.max(0, Math.min(1, ((pos.mx-a.x)*dx + (pos.my-a.y)*dy)/len2));
-                  if (Math.hypot(pos.mx-(a.x+t*dx), pos.my-(a.y+t*dy)) < LINE_M) { hit2 = true; break; }
-                }
-              }
-              if (hit2) { hitSh = sh; dragType = 'rect-move'; break; }
-            } else if (sh.type === 'rect' || sh.type === 'void' || sh.type === 'mass') {
-              // Bounds check first
-              if (pos.mx < sh.x - BORDER_M || pos.mx > sh.x + sh.w + BORDER_M) continue;
-              if (pos.my < sh.y - BORDER_M || pos.my > sh.y + sh.h + BORDER_M) continue;
-              // For frame rects: only the border band is clickable
-              if (sh.fill === 'frame') {
-                const nearL = Math.abs(pos.mx - sh.x) <= BORDER_M;
-                const nearR = Math.abs(pos.mx - (sh.x + sh.w)) <= BORDER_M;
-                const nearT = Math.abs(pos.my - sh.y) <= BORDER_M;
-                const nearB = Math.abs(pos.my - (sh.y + sh.h)) <= BORDER_M;
-                if (nearL || nearR || nearT || nearB) { hitSh = sh; dragType = 'rect-move'; break; }
-              } else {
-                // Solid rect: full interior clickable
-                if (pos.mx >= sh.x && pos.mx <= sh.x + sh.w &&
-                    pos.my >= sh.y && pos.my <= sh.y + sh.h) {
-                  hitSh = sh; dragType = 'rect-move'; break;
-                }
-              }
+        // Point drag on selected polyline (single selection only)
+        if (!hitSh && modMultiSelected.length <= 1 && state.modSelectedShape) {
+          const selPoly = (mod.shapes || []).find(s => s.id === state.modSelectedShape && s.type === 'polyline' && s.view !== 'side');
+          if (selPoly?.pts?.length) {
+            const PT_R = 0.2;
+            let ptHit = -1;
+            for (let pi = 0; pi < selPoly.pts.length; pi++) {
+              const pt = selPoly.pts[pi];
+              if (Math.hypot(pos.mx - pt.x, pos.my - pt.y) < PT_R) { ptHit = pi; break; }
+            }
+            if (ptHit >= 0) {
+              modShapeDrag = {
+                type: 'poly-pt', shapeId: selPoly.id, ptIdx: ptHit,
+                modIdx: hit.modIdx, startSx: sx, startSy: sy,
+                origPx: selPoly.pts[ptHit].x, origPy: selPoly.pts[ptHit].y,
+                grabMx: pos.mx, grabMy: pos.my,
+                viewRect: rects.front,
+              };
+              draw2D(); return;
             }
           }
         }
 
-        // Alt+drag: duplicate then drag copy
-        if (e.altKey && hitSh) {
-          historySnapshot();
-          const copy = { ...JSON.parse(JSON.stringify(hitSh)), id: modNextId2() };
-          mod.shapes.push(copy); hitSh = copy;
+        if (!hitSh) {
+          const frontHits = modCollectHitsAt(mod, pos.mx, pos.my, 'front');
+          hitSh = modPickHitForSelect(frontHits, isShiftAdd(e));
+          if (hitSh?.type === 'line') dragType = 'line-move';
         }
 
-        modApplyClickSelection(hitSh, isShiftAdd(e));
-        if (hitSh) {
-          historySnapshot();
-          modShapeDrag = {
-            type: dragType, shapeId: hitSh.id, modIdx: hit.modIdx,
-            startSx: sx, startSy: sy,
-            grabMx: pos.mx, grabMy: pos.my,
-            origX: hitSh.x, origY: hitSh.y, origW: hitSh.w, origH: hitSh.h,
-            origX1: hitSh.x1, origY1: hitSh.y1, origX2: hitSh.x2, origY2: hitSh.y2,
-            origPts: hitSh.pts ? hitSh.pts.map(p => ({x:p.x, y:p.y})) : null, origCx: hitSh.cx, origCy: hitSh.cy,
-            viewRect: rects.front,
-          };
-        } else {
-          modShapeDrag = null;
-          startModMarquee(sx, sy, hit.modIdx, hit.view, rects.front, isShiftAdd(e));
-        }
-        draw2D(); updateModHandles();
+        handleModSelectResult(e, sx, sy, hit, hitSh, pos, dragType, rects.front);
       }
       return;
     }
@@ -15258,6 +15465,42 @@ function finishModMarquee() {
       modMarqueeEnd = { sx, sy };
       updateModMarqueeRect();
       draw2D();
+      return;
+    }
+
+    if (modMultiDragPending) {
+      if (Math.hypot(sx - modMultiDragPending.sx, sy - modMultiDragPending.sy) >= 4) {
+        historySnapshot();
+        startModMultiDrag(
+          modMultiDragPending.modIdx,
+          modMultiDragPending.view,
+          modMultiDragPending.viewRect,
+          modMultiDragPending.sx,
+          modMultiDragPending.sy,
+          modMultiDragPending.grabMx,
+          modMultiDragPending.grabMy,
+          !!modMultiDragPending.altKey
+        );
+      } else {
+        return;
+      }
+    }
+
+    if (modMultiDrag) {
+      const mod2 = state.modules[modMultiDrag.modIdx];
+      if (mod2) {
+        const snapPt = computeModSnap(sx, sy, modMultiDrag.modIdx, modMultiDrag.view, modMultiDrag.viewRect, null, null);
+        const dx = snapPt.mx - modMultiDrag.grabMx;
+        const dy = snapPt.my - modMultiDrag.grabMy;
+        modMultiSelected.forEach(id => {
+          const sh = (mod2.shapes || []).find(s => s.id === id);
+          const orig = modMultiDrag.origins[id];
+          if (sh && orig) applyModDragDelta(sh, orig, dx, dy, mod2, modMultiDrag.view);
+        });
+        lastModSnap = snapPt;
+        draw2D();
+        updateModHandles();
+      }
       return;
     }
 
@@ -15365,6 +15608,15 @@ function finishModMarquee() {
     if (modMarqueeActive) {
       finishModMarquee();
       return;
+    }
+
+    if (modMultiDrag) {
+      modMultiDrag = null;
+      lastModSnap = null;
+      rebuild3D();
+    }
+    if (modMultiDragPending) {
+      modMultiDragPending = null;
     }
 
     if (modShapeDrag) {
@@ -15645,7 +15897,8 @@ draw2D = function() {
                 state.sepPtDrag ||
                 sepDraw ||
                 marqueeActive || modMarqueeActive || multiDragPending ||
-                modDraw2.active || modHandleDrag != null || modShapeDrag != null ||
+                modDraw2.active || modHandleDrag != null || modShapeDrag != null || modMultiDrag != null ||
+                modMultiDragPending != null ||
                 connectorDrag != null;
   if (busy) return;
   clearTimeout(_rebuild3DTimer);
