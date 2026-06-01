@@ -1096,6 +1096,11 @@
           color:var(--text)" onmouseover="this.style.background='var(--bg2)'" onmouseout="this.style.background='none'">
           🏙 Photorealistic
         </button>
+        <button onclick="startRender('interior')" style="display:block;width:100%;padding:8px 14px;
+          text-align:left;background:none;border:none;cursor:pointer;font-size:12px;font-family:var(--sans);
+          color:var(--text)" onmouseover="this.style.background='var(--bg2)'" onmouseout="this.style.background='none'">
+          🏠 Interior Photo
+        </button>
         <button onclick="startRender('model')" style="display:block;width:100%;padding:8px 14px;
           text-align:left;background:none;border:none;cursor:pointer;font-size:12px;font-family:var(--sans);
           color:var(--text)" onmouseover="this.style.background='var(--bg2)'" onmouseout="this.style.background='none'">
@@ -11561,7 +11566,8 @@ const PHOTO_RENDER_STYLE = `PHOTOREALISTIC STYLE (target look — soft Nordic co
 - Ground plane: light grey crushed stone / gravel texture; grass patches are WILD MEADOW planting inside the drawn polygons (varied blade height, clover, small white wildflowers, natural unkempt edges) — NOT flat green carpet or manicured lawn
 - Furniture: minimalist light-wood outdoor pieces (Aalto tables/stools) at exact positions — pale grey or natural wood tones
 - Architecture: match reference geometry and MATERIAL COLOR KEY colors; timber reads as natural vertical grain, glazing as soft sky-reflective glass
-- Camera: editorial architectural photo, 35–50mm, calm serene mood, subtle film grain — avoid glossy CGI visualization tropes`;
+- Camera: editorial architectural photo, 35–50mm, calm serene mood, subtle film grain — avoid glossy CGI visualization tropes
+- Perspective: architectural photography — vertical lines straight and parallel (columns, mullions, wall edges); keystone corrected, no converging verticals or tilted walls; level horizon`;
 
 const PHOTO_TREE_AND_CONTEXT = `TREES (photorealistic — critical):
 - Tree markers in the reference viewport are PLACEMENT GUIDES only. Render each as a REAL slender deciduous tree: thin trunk, fine branching, airy SPARSE pale-green leaf canopy (birch / early-spring feel). Branches partly visible through thin foliage.
@@ -11575,8 +11581,29 @@ BACKGROUND / SITE CONTEXT:
   - Pale overcast sky with natural horizon — NOT an empty grey void
 - Main building stays the hero; background trees and buildings are softer, slightly defocused for depth`;
 
+const INTERIOR_RENDER_STYLE = `INTERIOR PHOTOREALISTIC STYLE (atmospheric target — interpret mood, NOT specific furniture):
+- Genre: editorial architectural interior photograph — minimalist industrial loft, calm and airy
+- Structure: exposed cast-in-place concrete ceiling with visible formwork lines, matte neutral grey; square concrete columns; lower walls may include light birch/plywood panel zones
+- Floor: polished terrazzo or honed concrete with fine speckled aggregate, soft semi-gloss reflections catching window light
+- Glazing: tall floor-to-ceiling windows, slim dark metal frames, clear glass; natural city/horizon beyond when visible in the reference viewport
+- Lighting: abundant soft natural daylight from windows, warm golden-hour bias, long gentle shadows on the floor — bright serene mood. Avoid flat overcast exterior look, studio flash, lens flare, or HDR bloom
+- Palette: neutral greys, warm off-whites, light beige, natural light wood; accent colors only where the MATERIAL COLOR KEY specifies them
+- Composition: generous open negative space, uncluttered, subtle film grain, 24–35mm interior lens feel
+- Perspective: architectural photography — vertical lines straight and parallel (columns, mullions, wall edges, window frames); keystone corrected, no converging verticals or leaning walls; level horizon
+- Textiles: simple floor-length neutral curtains (light grey linen, soft drape) only at openings that show curtain geometry in the reference
+- Furniture & decor: use ONLY what appears in the reference screenshot — same types, count, layout, and colors. Do NOT import furniture or styling from any external moodboard`;
+
+const INTERIOR_FIDELITY_RULES = `INTERIOR FIDELITY RULES:
+- Preserve exact camera angle, room geometry, openings, slab/deck levels, and material colors from the reference
+- Render every furniture piece and room separator (heavy/light walls, curtains, banisters) visible in the screenshot — same count and placement
+- Match MATERIAL COLOR KEY for structure, glazing, furniture, and fabric colors
+- Curtains: translucent wavy fabric in the assigned color, hanging full height where drawn
+- Do NOT add exterior courtyard gravel, wild meadow grass, or Nordic landscape planting unless clearly visible in the reference viewport
+- Do NOT replace blocky placeholder furniture with unrelated designer pieces — refine the same forms photorealistically`;
+
 const DEFAULT_PROMPTS = {
   photorealistic: `Match the MATERIAL COLOR KEY exactly. Preserve all tree marker positions, furniture sets, and grass patch footprints from the reference. Translate tree markers into realistic thin-leaf deciduous trees. Fill empty background with trees and distant buildings. Timber/brown tones are natural wood. Light blue/cyan tones are soft overcast glazing.`,
+  interior: `Photorealistic interior photograph in the INTERIOR STYLE block. Architectural perspective: straight vertical lines, keystone corrected like a shift-lens architectural photo. All furniture, seating layout, and room contents must come from the reference screenshot only — refine materials and lighting, do not redesign the room. Warm window light, exposed concrete ceiling, polished floor, clear glazing.`,
   model: `Physical architectural scale model photograph, 1:200 scale. White cardboard base and ground plane only — preserve ALL colors from the MATERIAL COLOR KEY on the building: timber/brown structure as stained wood or tan card (NOT white), glazing as clear acetate/perspex, colored panels as matching card stock. Preserve every naked tree exactly as in the reference: gray/tan (${TREE_NAKED_RENDER_HEX}) angular branch models — NOT generic wire armatures. Include ALL furniture sets (round tables with stools) inside the building and on exterior plazas — same count and layout as the reference. Soft studio lighting from above-left, grey seamless background, macro lens, ultra-sharp focus, no people.`
 };
 
@@ -11749,11 +11776,12 @@ function buildRenderSceneInventory(mode) {
   const grassPatches = (state.plans[0]?.objects || []).filter(o =>
     o.type === 'landscape' && o.kind === 'grass' && o.closed && o.pts?.length >= 3).length;
   const isPhoto = mode === 'photorealistic';
-  if (!kinds.length && !grassPatches && !isPhoto) return '';
+  const isInterior = mode === 'interior';
+  if (!kinds.length && !grassPatches && !isPhoto && !isInterior) return '';
 
   const lines = ['SCENE INVENTORY (preserve ALL — same count, placement, and style as reference image):'];
 
-  if (grassPatches) {
+  if (grassPatches && !isInterior) {
     lines.push(`- ${grassPatches} grass patch${grassPatches === 1 ? '' : 'es'}: irregular wild meadow on light grey gravel (sage/olive greens, varied texture, natural edges) — match exact polygon footprints from reference`);
   }
 
@@ -11761,7 +11789,9 @@ function buildRenderSceneInventory(mode) {
 
   const treeNaked = remaining.treeNaked || 0;
   if (treeNaked) {
-    if (isPhoto) {
+    if (isInterior) {
+      lines.push(`- ${treeNaked} tree marker${treeNaked === 1 ? '' : 's'}: render only if clearly interior planting in the reference; otherwise omit exterior trees`);
+    } else if (isPhoto) {
       lines.push(`- ${treeNaked} tree marker${treeNaked === 1 ? '' : 's'}: at each exact position render a REAL slender deciduous tree with thin airy pale-green leaves — NOT grey stick proxies from the viewport`);
     } else {
       lines.push(`- ${treeNaked} naked tree${treeNaked === 1 ? '' : 's'}: bare angular branch sculptures in gray-tan (${TREE_NAKED_RENDER_HEX}), NOT wire armatures, NOT omitted`);
@@ -11802,10 +11832,13 @@ function buildRenderSceneInventory(mode) {
     if (/^grpRound|^table|^stool|^desk|^chair/.test(kind)) hasCafeSets = true;
   });
 
-  if (hasCafeSets) {
+  if (hasCafeSets && !isInterior) {
     lines.push('- Tables/stools visible inside ground-floor glazing AND on exterior plaza — do not remove any set');
   }
-  if (isPhoto) {
+  if (isInterior) {
+    lines.push('- Interior: preserve all furniture groups, seating, tables, and room separators exactly as placed in the reference');
+    lines.push('- Do NOT add exterior landscaping or moodboard furniture not present in the screenshot');
+  } else if (isPhoto) {
     if (!treeNaked) {
       lines.push('- Add slender thin-leaf deciduous trees in background if the reference frame lacks sufficient planting');
     }
@@ -11833,7 +11866,10 @@ function getRenderContextBlock(s, mode) {
     const inventory = buildRenderSceneInventory(mode);
     if (inventory) block += inventory + '\n\n';
     block += FIDELITY_RULES + '\n\n';
-    if (mode === 'photorealistic') {
+    if (mode === 'interior') {
+      block += INTERIOR_FIDELITY_RULES + '\n\n';
+      block += INTERIOR_RENDER_STYLE + '\n\n';
+    } else if (mode === 'photorealistic') {
       block += PHOTO_TREE_AND_CONTEXT + '\n\n';
       block += PHOTO_RENDER_STYLE + '\n\n';
     }
@@ -11857,6 +11893,7 @@ function saveAdminSettings() {
   const s = {
     apiKey: document.getElementById('admin-api-key').value.trim(),
     promptPhoto: document.getElementById('admin-prompt-photo').value.trim() || DEFAULT_PROMPTS.photorealistic,
+    promptInterior: document.getElementById('admin-prompt-interior').value.trim() || DEFAULT_PROMPTS.interior,
     promptModel: document.getElementById('admin-prompt-model').value.trim() || DEFAULT_PROMPTS.model,
     includeMaterialLegend: document.getElementById('admin-material-legend').checked,
   };
@@ -11870,6 +11907,7 @@ function openAdminPanel() {
   const s = getAdminSettings();
   document.getElementById('admin-api-key').value = s.apiKey || '';
   document.getElementById('admin-prompt-photo').value = s.promptPhoto || DEFAULT_PROMPTS.photorealistic;
+  document.getElementById('admin-prompt-interior').value = s.promptInterior || DEFAULT_PROMPTS.interior;
   document.getElementById('admin-prompt-model').value = s.promptModel || DEFAULT_PROMPTS.model;
   document.getElementById('admin-material-legend').checked = s.includeMaterialLegend !== false;
   document.getElementById('admin-panel').style.display = 'flex';
@@ -11932,7 +11970,7 @@ function renderStrip() {
       card.appendChild(img);
       const badge = document.createElement('div');
       badge.style.cssText = 'position:absolute;top:2px;left:2px;font-size:7px;background:rgba(0,0,0,0.5);color:#fff;padding:1px 3px;border-radius:2px;font-family:var(--mono);pointer-events:none;';
-      badge.textContent = job.mode === 'photorealistic' ? 'Photo' : 'Model';
+      badge.textContent = job.mode === 'photorealistic' ? 'Photo' : job.mode === 'interior' ? 'Interior' : 'Model';
       card.appendChild(badge);
     } else if (job.status === 'error') {
       card.innerHTML = '<span style="font-size:20px" title="' + (job.error||'').slice(0,80) + '">⚠</span>';
@@ -12024,7 +12062,7 @@ async function startRender(mode) {
   const job = {
     id: ++renderIdCounter,
     mode,
-    label: mode === 'photorealistic' ? '🏙 Photo' : '◻ Model',
+    label: mode === 'photorealistic' ? '🏙 Photo' : mode === 'interior' ? '🏠 Interior' : '◻ Model',
     status: 'running',
     progress: 0,
     statusText: 'Sending…',
@@ -12042,7 +12080,13 @@ async function startRender(mode) {
 async function runRenderJob(job, viewportB64, s) {
   const prompt = job.mode === 'photorealistic'
     ? (s.promptPhoto || DEFAULT_PROMPTS.photorealistic)
+    : job.mode === 'interior'
+    ? (s.promptInterior || DEFAULT_PROMPTS.interior)
     : (s.promptModel  || DEFAULT_PROMPTS.model);
+
+  const intro = job.mode === 'interior'
+    ? 'This is a 3D architectural INTERIOR model screenshot. Reproduce the same room geometry, camera, element count, and colors. Style as a photorealistic interior photograph — all furniture and layout must come ONLY from this image.\n\n'
+    : 'This is a 3D architectural model screenshot. Reproduce it faithfully — same geometry, element count, colors, and camera. Do not omit trees, furniture, or grass patches.\n\n';
 
   const updateProgress = (pct, text) => {
     job.progress = pct; job.statusText = text; renderStrip();
@@ -12069,7 +12113,7 @@ async function runRenderJob(job, viewportB64, s) {
           body: JSON.stringify({
             contents: [{ role: 'user', parts: [
               { inline_data: { mime_type: 'image/jpeg', data: viewportB64 } },
-              { text: `This is a 3D architectural model screenshot. Reproduce it faithfully — same geometry, element count, colors, and camera. Do not omit trees, furniture, or grass patches.\n\n${getRenderContextBlock(s, job.mode)}${prompt}` }
+              { text: `${intro}${getRenderContextBlock(s, job.mode)}${prompt}` }
             ]}],
             generationConfig: { responseModalities: ['TEXT', 'IMAGE'] },
           }),
@@ -14051,6 +14095,7 @@ function updateModShapeDepth(input) {
 
 // ── Wire color dot: left-click only opens color menu ──
 document.addEventListener('DOMContentLoaded', () => {
+  initSavedViewsPanel();
   const dot = document.getElementById('mod-color-dot');
   if (dot) {
     dot.addEventListener('mousedown', e => {
@@ -17245,8 +17290,11 @@ requestAnimationFrame(() => {
     </label>
     <input id="admin-api-key" type="password" placeholder="AIza..."
       style="width:100%;padding:8px;border:1px solid var(--border2);border-radius:6px;font-size:12px;font-family:var(--mono);background:var(--bg);color:var(--text);box-sizing:border-box;margin-bottom:12px">
-    <label style="display:block;font-size:11px;color:var(--text3);margin-bottom:4px">Photorealistic prompt</label>
+    <label style="display:block;font-size:11px;color:var(--text3);margin-bottom:4px">Photorealistic prompt (exterior)</label>
     <textarea id="admin-prompt-photo" rows="3"
+      style="width:100%;padding:8px;border:1px solid var(--border2);border-radius:6px;font-size:11px;font-family:var(--mono);background:var(--bg);color:var(--text);resize:vertical;box-sizing:border-box;margin-bottom:12px"></textarea>
+    <label style="display:block;font-size:11px;color:var(--text3);margin-bottom:4px">Interior photo prompt</label>
+    <textarea id="admin-prompt-interior" rows="3"
       style="width:100%;padding:8px;border:1px solid var(--border2);border-radius:6px;font-size:11px;font-family:var(--mono);background:var(--bg);color:var(--text);resize:vertical;box-sizing:border-box;margin-bottom:12px"></textarea>
     <label style="display:block;font-size:11px;color:var(--text3);margin-bottom:4px">Model render prompt</label>
     <textarea id="admin-prompt-model" rows="3"
