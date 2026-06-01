@@ -227,6 +227,37 @@
   }
   #measure-badge.show { display: block; }
 
+  /* Saved views list — scroll after 8 rows */
+  #saved-views-details { overflow: hidden; }
+  #saved-views-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 4px 6px 6px;
+    min-width: 120px;
+    max-height: calc(24px * 8 + 2px * 7 + 10px);
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(0,0,0,0.28) transparent;
+  }
+  #saved-views-list.sv-scroll { overflow-y: scroll; }
+  #saved-views-list::-webkit-scrollbar { width: 7px; }
+  #saved-views-list::-webkit-scrollbar-track { background: transparent; }
+  #saved-views-list::-webkit-scrollbar-thumb {
+    background: rgba(0,0,0,0.22);
+    border-radius: 4px;
+  }
+  #saved-views-list::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.35); }
+  #saved-views-list .sv-view-btn.active {
+    background: var(--text);
+    color: #fff;
+    border-color: var(--text);
+  }
+
   /* Snap submenu */
   .ctx-snap-row { justify-content: space-between; }
   .ctx-submenu-trigger { position: relative; }
@@ -868,7 +899,7 @@
           <button onclick="event.stopPropagation();event.preventDefault();saveCurrentView()"
             style="font-size:9px;padding:1px 5px;border:1px solid var(--border2);border-radius:4px;background:var(--bg2);cursor:pointer;color:var(--text2)">+ Save</button>
         </summary>
-        <div id="saved-views-list" style="display:flex;flex-direction:column;gap:2px;padding:4px 6px 6px;max-height:180px;overflow-y:auto;min-width:120px;"></div>
+        <div id="saved-views-list"></div>
       </details>
     </div>
 
@@ -1037,6 +1068,9 @@
     <svg viewBox="0 0 15 15" fill="none"><path d="M10.5 2L13 4.5l-8 8H2.5v-2.5l8-8z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M8.5 4l2.5 2.5" stroke="currentColor" stroke-width="1" opacity="0.5"/></svg>
   </button>
   <div class="tool-sep" title="Library & sheets"></div>
+  <button class="tool-btn" id="t-grass" onclick="setTool('grass')" title="Grass patch — closed polyline (U)">
+    <svg viewBox="0 0 15 15" fill="none"><ellipse cx="7.5" cy="8.5" rx="5.5" ry="3.2" stroke="currentColor" stroke-width="1.1" fill="currentColor" fill-opacity="0.15"/><path d="M2 12.5 Q5 9 7.5 10.5 T13 11.5" stroke="currentColor" stroke-width="1" stroke-linecap="round"/><path d="M3 13.5 Q6.5 10.5 8.5 12 T14 11" stroke="currentColor" stroke-width="0.85" stroke-linecap="round" opacity="0.55"/></svg>
+  </button>
   <button class="tool-btn" id="t-stamp" onclick="openFurniturePicker()" title="Furniture library (F)">
     <svg viewBox="0 0 15 15" fill="none" stroke="currentColor" stroke-width="1.15" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="1.5" width="3.5" height="12" rx="0.5"/><rect x="6.5" y="1.5" width="3.5" height="12" rx="0.5"/><path d="M11 2l2 11.5" stroke-width="1.1"/></svg>
   </button>
@@ -1424,6 +1458,13 @@
         Perpendicular <span class="snap-check" id="sc-perpendicular"></span>
       </div>
       <div class="ctx-sep"></div>
+      <div class="ctx-row ctx-snap-row" id="snap-all-off-row" onclick="disableAllSnaps();event.stopPropagation()">
+        Turn off all snaps
+      </div>
+      <div class="ctx-row ctx-snap-row" id="snap-restore-row" onclick="restoreAllSnaps();event.stopPropagation()" style="display:none">
+        Restore snaps <span class="snap-check">↩</span>
+      </div>
+      <div class="ctx-sep"></div>
       <div class="ctx-submenu-wrap" id="ctx-plan-snap-wrap">
         <div class="ctx-row ctx-submenu-trigger" id="ctx-plan-snap-trigger">
           Snap increment
@@ -1540,6 +1581,14 @@
       <label id="lbl-roof-joists" style="display:none;align-items:center;gap:5px;font-size:11px;color:var(--text2);cursor:pointer;padding:2px 0;font-family:var(--font)">
         <input type="checkbox" id="chk-roof-joists" onchange="toggleRoofJoists(this.checked)" style="width:13px;height:13px;cursor:pointer;accent-color:#2a6dd4">
         Roof joists
+      </label>
+      <label id="lbl-roof-joists-x" style="display:none;align-items:center;gap:5px;font-size:11px;color:var(--text2);cursor:pointer;padding:2px 0 2px 18px;font-family:var(--font)">
+        <input type="checkbox" id="chk-roof-joists-x" onchange="toggleRoofJoistsDir('x', this.checked)" style="width:13px;height:13px;cursor:pointer;accent-color:#2a6dd4">
+        Joists along X
+      </label>
+      <label id="lbl-roof-joists-y" style="display:none;align-items:center;gap:5px;font-size:11px;color:var(--text2);cursor:pointer;padding:2px 0 2px 18px;font-family:var(--font)">
+        <input type="checkbox" id="chk-roof-joists-y" onchange="toggleRoofJoistsDir('y', this.checked)" style="width:13px;height:13px;cursor:pointer;accent-color:#2a6dd4">
+        Joists along Y
       </label>
       <div style="height:1px;background:var(--border);margin:2px 0"></div>
       <div class="ctx-submenu-wrap" id="ctx-roof-color-wrap">
@@ -1787,6 +1836,7 @@ let state = {
   modSelectedShape: null, // id of selected shape in module editor
   renderMode: false,
   savedViews: [],  // [{name, theta, phi, dist, target:{x,y,z}}]
+  activeSavedViewIdx: null,
   modSnapM: 0.05,  // module editor snap increment in metres (0 = off)
   modSnapModes: { grid: true, point: true, midpoint: true, edge: true },
   planSnapM: 0.5,  // plan canvas snap increment in metres (0 = off)
@@ -1977,8 +2027,9 @@ function draw2D() {
       ctx2.restore();
     }
 
-    // Objects on this plan
-    p.objects.forEach(obj => drawObject2D(obj, idx));
+    // Objects on this plan — landscape underlay first, then everything else on top
+    p.objects.filter(o => o.type === 'landscape').forEach(obj => drawObject2D(obj, idx));
+    p.objects.filter(o => o.type !== 'landscape').forEach(obj => drawObject2D(obj, idx));
 
     // (canvas boundary handles removed — canvas size is fixed)
   });
@@ -2073,6 +2124,8 @@ function drawObject2D(obj, planIdx) {
     drawFurnitureGroup(obj, sel, multiSel, yOff);
   } else if (obj.type === 'separator') {
     drawSeparator2D(obj, sel, multiSel, yOff);
+  } else if (obj.type === 'landscape') {
+    drawLandscape2D(obj, sel, multiSel, yOff);
   }
   ctx2.restore();
 }
@@ -2122,6 +2175,7 @@ function drawSectionCut(obj, planIdx) {
   const sw = obj.w * state.zoom, sh = obj.h * state.zoom;
 
   const isCircStair = (obj.type === 'stair' && obj.stairType === 'circular');
+  const isGridType = obj.type === 'grid' || obj.type === 'fgrid';
 
   // Slab section: flat fill only — no diagonal hatch
   if (obj.type === 'slab') {
@@ -2136,8 +2190,8 @@ function drawSectionCut(obj, planIdx) {
     return;
   }
 
-  // Fill (skip for circular stairs — they draw their own circular fill)
-  if (!isCircStair) {
+  // Fill (skip for circular stairs and grid/fgrid — they draw clipped fill below)
+  if (!isCircStair && !isGridType) {
     ctx2.globalAlpha = 0.55;
     ctx2.fillStyle = obj.color || '#d8d4cc';
     ctx2.fillRect(s.x, s.y, sw, sh);
@@ -2145,7 +2199,7 @@ function drawSectionCut(obj, planIdx) {
   }
 
   // Bay grid lines on grid section cuts (match ground-floor grid readability)
-  if (obj.type === 'grid' || obj.type === 'fgrid') {
+  if (isGridType) {
     const cols = Math.round(obj.cols) || 3;
     const rows = Math.round(obj.rows) || 3;
     const poly = obj.edgePoly;
@@ -2154,6 +2208,7 @@ function drawSectionCut(obj, planIdx) {
       x: s.x + (sw / cols) * c,
       y: s.y + (sh / rows) * r,
     });
+
     ctx2.save();
     ctx2.beginPath();
     if (hasPoly) {
@@ -2162,11 +2217,15 @@ function drawSectionCut(obj, planIdx) {
         if (i === 0) ctx2.moveTo(p.x, p.y); else ctx2.lineTo(p.x, p.y);
       });
       ctx2.closePath();
-      ctx2.clip();
     } else {
       ctx2.rect(s.x, s.y, sw, sh);
-      ctx2.clip();
     }
+    ctx2.fillStyle = obj.color || '#d8d4cc';
+    ctx2.globalAlpha = obj.hasRoof ? 0.12 : 0.55;
+    ctx2.fill();
+    ctx2.globalAlpha = 1;
+    if (hasPoly) ctx2.clip();
+
     ctx2.strokeStyle = 'rgba(0,0,0,0.16)';
     ctx2.lineWidth = 0.6;
     ctx2.beginPath();
@@ -2181,6 +2240,21 @@ function drawSectionCut(obj, planIdx) {
     ctx2.stroke();
     ctx2.restore();
     drawGridColumns2D(obj, s.x, s.y, sw, sh, sel, { section: true });
+
+    if (hasPoly) {
+      ctx2.save();
+      ctx2.strokeStyle = sel ? '#2a6dd4' : (obj.color || '#a09070');
+      ctx2.lineWidth = sel ? 2.5 : 1.8;
+      ctx2.lineJoin = 'round';
+      ctx2.beginPath();
+      poly.forEach((pt, i) => {
+        const p = gpt(pt.c, pt.r);
+        if (i === 0) ctx2.moveTo(p.x, p.y); else ctx2.lineTo(p.x, p.y);
+      });
+      ctx2.closePath();
+      ctx2.stroke();
+      ctx2.restore();
+    }
   }
 
   // Stair section
@@ -2235,15 +2309,15 @@ function drawSectionCut(obj, planIdx) {
     }
   }
 
-  // Bold border (skip for circular stairs — they draw their own circular border)
-  if (!isCircStair) {
+  // Bold border (skip for circular stairs, fgrid edit poly, and roof grids)
+  if (!isCircStair && !(isGridType && (obj.edgePoly?.length >= 3 || obj.hasRoof))) {
     ctx2.strokeStyle = 'rgba(0,0,0,0.72)';
     ctx2.lineWidth = 1.8;
     ctx2.strokeRect(s.x, s.y, sw, sh);
   }
 
   // Roof overhang outline (grid/fgrid with roof enabled)
-  if (obj.type === 'grid' || obj.type === 'fgrid') {
+  if (isGridType && obj.hasRoof) {
     const hasPoly = obj.type === 'fgrid' && obj.edgePoly && obj.edgePoly.length >= 3;
     drawGridRoofOverhang2D(obj, s.x, s.y, sw, sh, sel, hasPoly);
   }
@@ -2488,16 +2562,109 @@ function drawGridColumns2D(obj, sx, sy, sw, sh, sel, opts = {}) {
   ctx2.restore();
 }
 
+function fgridEdgePolyWorldPts(obj) {
+  if (!obj?.edgePoly?.length) return [];
+  const cols = obj.cols || 3, rows = obj.rows || 3;
+  return obj.edgePoly.map(pt => ({
+    x: obj.x + (pt.c / cols) * obj.w,
+    y: obj.y + (pt.r / rows) * obj.h,
+  }));
+}
+
+function fgridEdgePolySignedAreaWorld(pts) {
+  let a = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const p = pts[i], q = pts[(i + 1) % pts.length];
+    a += p.x * q.y - q.x * p.y;
+  }
+  return a;
+}
+
+function edgeOutwardNormalWorld(ax, ay, bx, by, signedArea) {
+  const dx = bx - ax, dy = by - ay;
+  const len = Math.hypot(dx, dy) || 1;
+  const tx = dx / len, ty = dy / len;
+  const flip = signedArea < 0 ? -1 : 1;
+  return { nx: ty * flip, ny: -tx * flip };
+}
+
+function offsetLineIntersectWorld(prev, curr, next, offsetPx, signedArea) {
+  const d0x = curr.x - prev.x, d0y = curr.y - prev.y;
+  const d1x = next.x - curr.x, d1y = next.y - curr.y;
+  const n0 = edgeOutwardNormalWorld(prev.x, prev.y, curr.x, curr.y, signedArea);
+  const n1 = edgeOutwardNormalWorld(curr.x, curr.y, next.x, next.y, signedArea);
+  const p0 = { x: prev.x + n0.nx * offsetPx, y: prev.y + n0.ny * offsetPx };
+  const p1 = { x: curr.x + n1.nx * offsetPx, y: curr.y + n1.ny * offsetPx };
+  const cross = d0x * d1y - d0y * d1x;
+  if (Math.abs(cross) < 1e-12) {
+    return { x: curr.x + (n0.nx + n1.nx) * offsetPx * 0.5, y: curr.y + (n0.ny + n1.ny) * offsetPx * 0.5 };
+  }
+  const dx = p1.x - p0.x, dy = p1.y - p0.y;
+  const t = (dx * d1y - dy * d1x) / cross;
+  return { x: p0.x + d0x * t, y: p0.y + d0y * t };
+}
+
+function offsetPolygonWorldPts(pts, offsetPx, signedArea) {
+  if (pts.length < 3) return pts;
+  const area = signedArea != null ? signedArea : fgridEdgePolySignedAreaWorld(pts);
+  const n = pts.length;
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    out.push(offsetLineIntersectWorld(
+      pts[(i + n - 1) % n], pts[i], pts[(i + 1) % n], offsetPx, area
+    ));
+  }
+  return out;
+}
+
+// Offset fgrid edit polygon outward (or inward when offsetM < 0) in plan metres
+function offsetFgridEdgePolyWorld(obj, offsetM) {
+  const pts = fgridEdgePolyWorldPts(obj);
+  if (pts.length < 3) return pts;
+  const signedArea = fgridEdgePolySignedAreaWorld(pts);
+  return offsetPolygonWorldPts(pts, mToWorld(offsetM), signedArea);
+}
+
+function fgridWorldPolyToScreen(pts, obj, sx, sy, sw, sh) {
+  return pts.map(pt => ({
+    x: sx + ((pt.x - obj.x) / obj.w) * sw,
+    y: sy + ((pt.y - obj.y) / obj.h) * sh,
+  }));
+}
+
+function fgridWorldPolyToThreeShape(pts, CX, CZ, SC) {
+  const s = new THREE.Shape();
+  pts.forEach((pt, pi) => {
+    const px = (pt.x - CX) * SC;
+    const pz = -((pt.y - CZ) * SC);
+    if (pi === 0) s.moveTo(px, pz); else s.lineTo(px, pz);
+  });
+  s.closePath();
+  return s;
+}
+
 function drawGridRoofOverhang2D(obj, sx, sy, sw, sh, sel, hasPoly) {
   if (!obj.hasRoof) return;
   migrateGridRoofDefaults(obj);
-  const oh = mToWorld(Math.max(0, obj.roofOverhang != null ? obj.roofOverhang : 0.5));
-  const oz = oh * state.zoom;
+  const ohM = Math.max(0, obj.roofOverhang != null ? obj.roofOverhang : 0.5);
+  const ohPx = mToWorld(ohM);
+  const oz = ohPx * state.zoom;
   ctx2.save();
   ctx2.strokeStyle = sel ? 'rgba(42,109,212,0.55)' : 'rgba(0,0,0,0.28)';
   ctx2.lineWidth = sel ? 1.2 : 0.85;
   ctx2.setLineDash([4, 3]);
-  ctx2.strokeRect(sx - oz, sy - oz, sw + 2 * oz, sh + 2 * oz);
+  if (hasPoly && obj.edgePoly?.length >= 3) {
+    const offsetPts = offsetFgridEdgePolyWorld(obj, ohM);
+    const spts = fgridWorldPolyToScreen(offsetPts, obj, sx, sy, sw, sh);
+    ctx2.beginPath();
+    spts.forEach((p, i) => {
+      if (i === 0) ctx2.moveTo(p.x, p.y); else ctx2.lineTo(p.x, p.y);
+    });
+    ctx2.closePath();
+    ctx2.stroke();
+  } else {
+    ctx2.strokeRect(sx - oz, sy - oz, sw + 2 * oz, sh + 2 * oz);
+  }
   ctx2.setLineDash([]);
   if ((obj.roofType || 'flat') === 'pitched' && !hasPoly) {
     ctx2.strokeStyle = sel ? 'rgba(42,109,212,0.45)' : 'rgba(0,0,0,0.22)';
@@ -2611,10 +2778,6 @@ function drawGrid(obj, sel, multiSel=false, yOff=0) {
       ctx2.fill();
       ctx2.globalAlpha = 1;
     }
-    const floors = obj.floors || 4;
-    ctx2.font = '11px DM Sans, sans-serif';
-    ctx2.fillStyle = '#4a7fc8';
-    ctx2.fillText((obj.label || 'Grid') + '  ' + floors + ' fl.', s.x + 2, s.y + sh + 13);
     drawHandles(s.x, s.y, sw, sh);
   }
 }
@@ -2760,6 +2923,8 @@ const SEPARATOR_KINDS = [
 const BANISTER_SPINDLE_SPACING_M = 0.1;
 let sepDraw = null;
 let statePendingSeparatorKind = 'lightWall';
+const GRASS_DEFAULT_COLOR = '#7cb342';
+let grassDraw = null;
 
 function separatorKindMeta(kind) {
   return SEPARATOR_KINDS.find(k => k.kind === kind) || SEPARATOR_KINDS[1];
@@ -2937,6 +3102,23 @@ function computeSeparatorSnap(sx, sy, lastPtPlan, baseY) {
   }
   const s = wts(px, py, baseY);
   return { wx: px, wy: py, sx: s.x, sy: s.y, type: 'grid', guides: [] };
+}
+
+// Grass polyline snap — respects plan snap + perpendicular snap settings (no forced ortho)
+function computeGrassSnap(sx, sy, lastPtPlan, baseY) {
+  if (lastPtPlan && state.snapModes.perpendicular) {
+    const snap = computeSnap(sx, sy, { wx: lastPtPlan.x, wy: lastPtPlan.y + baseY });
+    return { wx: snap.wx, wy: snap.wy - baseY, sx: snap.sx, sy: snap.sy, type: snap.type, guides: snap.guides || [] };
+  }
+  const raw = screenToWorld(sx, sy);
+  let px = raw.x;
+  let py = raw.y - baseY;
+  if (planSnapStepPx() > 0) {
+    px = snapPlan(px);
+    py = snapPlan(py);
+  }
+  const s = wts(px, py, baseY);
+  return { wx: px, wy: py, sx: s.x, sy: s.y, type: planSnapStepPx() > 0 ? 'grid' : 'free', guides: [] };
 }
 
 function hitSeparatorPoint(obj, sx, sy, yOff, threshold) {
@@ -3125,6 +3307,115 @@ function cancelSepDraw() {
   lastSnapResult = null;
   if (obj) plan().objects = objects().filter(o => o.id !== obj.id);
   draw2D();
+}
+
+function landscapeScreenBounds(obj, yOff) {
+  return separatorScreenBounds(obj, yOff);
+}
+
+function pointInLandscapePoly(obj, sx, sy, yOff, edgeOnly=true) {
+  if (!obj.pts?.length) return false;
+  const th = edgeOnly ? 10 : 8;
+  // Closed patches: border pick only so furniture/trees inside stay selectable
+  if (edgeOnly && obj.closed && obj.pts.length >= 3) {
+    return hitSeparatorPolyline(obj, sx, sy, yOff, th);
+  }
+  if (!obj.closed || obj.pts.length < 3) {
+    return hitSeparatorPolyline(obj, sx, sy, yOff, th);
+  }
+  const pts = obj.pts.map(p => wts(p.x, p.y, yOff));
+  let inside = false;
+  for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+    const xi = pts[i].x, yi = pts[i].y, xj = pts[j].x, yj = pts[j].y;
+    if (((yi > sy) !== (yj > sy)) && (sx < (xj - xi) * (sy - yi) / (yj - yi) + xi)) inside = !inside;
+  }
+  return inside || hitSeparatorPolyline(obj, sx, sy, yOff, th);
+}
+
+function drawLandscape2D(obj, sel, multiSel=false, yOff=0) {
+  if (!obj.pts?.length) return;
+  const col = obj.color || GRASS_DEFAULT_COLOR;
+  ctx2.save();
+  ctx2.beginPath();
+  const p0 = wts(obj.pts[0].x, obj.pts[0].y, yOff);
+  ctx2.moveTo(p0.x, p0.y);
+  for (let i = 1; i < obj.pts.length; i++) {
+    const p = wts(obj.pts[i].x, obj.pts[i].y, yOff);
+    ctx2.lineTo(p.x, p.y);
+  }
+  if (obj.closed && obj.pts.length >= 3) ctx2.closePath();
+  if (obj.closed && obj.pts.length >= 3) {
+    ctx2.fillStyle = col;
+    ctx2.globalAlpha = 0.42;
+    ctx2.fill();
+    ctx2.globalAlpha = 1;
+  }
+  ctx2.strokeStyle = sel || multiSel ? '#2a6dd4' : col;
+  ctx2.lineWidth = sel ? 1.5 : 1;
+  ctx2.stroke();
+  if (sel) {
+    obj.pts.forEach(pt => {
+      const s = wts(pt.x, pt.y, yOff);
+      ctx2.fillStyle = '#fff';
+      ctx2.beginPath(); ctx2.arc(s.x, s.y, 7, 0, Math.PI * 2); ctx2.fill();
+      ctx2.fillStyle = '#2a6dd4';
+      ctx2.beginPath(); ctx2.arc(s.x, s.y, 5, 0, Math.PI * 2); ctx2.fill();
+    });
+  }
+  ctx2.restore();
+}
+
+function finishGrassDraw() {
+  if (!grassDraw) return;
+  const obj = objects().find(o => o.id === grassDraw.objId);
+  grassDraw = null;
+  lastSnapResult = null;
+  if (!obj || !obj.pts || obj.pts.length < 3) {
+    if (obj) plan().objects = objects().filter(o => o.id !== obj.id);
+    draw2D();
+    return;
+  }
+  obj.closed = true;
+  state.selected = obj.id;
+  showPropsPanel(obj);
+  scheduleAutosave();
+  draw2D(); rebuild3D();
+}
+
+function cancelGrassDraw() {
+  if (!grassDraw) return;
+  const obj = objects().find(o => o.id === grassDraw.objId);
+  grassDraw = null;
+  lastSnapResult = null;
+  if (obj) plan().objects = objects().filter(o => o.id !== obj.id);
+  draw2D();
+}
+
+function buildLandscape3D(obj, SC, CX, CZ) {
+  if (!obj.closed || !obj.pts || obj.pts.length < 3) return;
+  const shape = new THREE.Shape();
+  obj.pts.forEach((pt, i) => {
+    const x = (pt.x - CX) * SC;
+    const z = (pt.y - CZ) * SC;
+    // ShapeGeometry Y becomes -world Z after rotateX(-π/2) — negate so plan Y maps to +Z
+    if (i === 0) shape.moveTo(x, -z);
+    else shape.lineTo(x, -z);
+  });
+  shape.closePath();
+  const geo = new THREE.ShapeGeometry(shape);
+  const mat = getMat(obj.color || GRASS_DEFAULT_COLOR, 0.94);
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.rotation.x = -Math.PI / 2;
+  mesh.position.y = 0.018;
+  mesh.receiveShadow = true;
+  threeScene.add(mesh);
+  building3D.push(mesh);
+}
+
+function buildAllLandscape3D(SC, CX, CZ) {
+  (state.plans[0]?.objects || [])
+    .filter(o => o.type === 'landscape' && o.closed && o.pts?.length >= 3)
+    .forEach(obj => buildLandscape3D(obj, SC, CX, CZ));
 }
 
 function drawTri(obj, sel, yOff=0) {
@@ -3318,6 +3609,7 @@ function drawCircle2D(obj, sel, multiSel=false, yOff=0) {
 
 // Scale: 1 world unit = 0.5m (GSIZ=24px = 0.5m at zoom=1)
 const PX_PER_M = 48; // 48px = 1m at zoom=1
+const GRID_DEFAULT_BAY_M = 5;
 
 function drawRect2D(obj, sel, yOff=0) {
   const s = wts(obj.x, obj.y, yOff);
@@ -3357,8 +3649,33 @@ function drawPolygon2D(obj, sel, yOff=0) {
 function pxToM(px) { return px / PX_PER_M; } // world px → metres (zoom-independent)
 function mToWorld(m) { return m * PX_PER_M; }
 
+// Snap drag-out to whole bay cells (same behaviour as handle resize).
+function gridLayoutFromDragWorld(s, c, bayM) {
+  const bayPx = mToWorld(bayM != null ? bayM : GRID_DEFAULT_BAY_M);
+  const ww = Math.abs(c.wx - s.wx), wh = Math.abs(c.wy - s.wy);
+  const cols = Math.max(1, Math.round(ww / bayPx));
+  const rows = Math.max(1, Math.round(wh / bayPx));
+  const w = cols * bayPx, h = rows * bayPx;
+  let x = Math.min(s.wx, c.wx), y = Math.min(s.wy, c.wy);
+  if (c.wx < s.wx) x = s.wx - w;
+  if (c.wy < s.wy) y = s.wy - h;
+  return { x, y, w, h, cols, rows };
+}
+function gridLayoutFromDragScreen(s, c, bayM) {
+  const bayScr = mToWorld(bayM != null ? bayM : GRID_DEFAULT_BAY_M) * state.zoom;
+  const rawW = Math.abs(c.sx - s.sx), rawH = Math.abs(c.sy - s.sy);
+  const cols = Math.max(1, Math.round(rawW / bayScr));
+  const rows = Math.max(1, Math.round(rawH / bayScr));
+  const w = cols * bayScr, h = rows * bayScr;
+  let x = Math.min(s.sx, c.sx), y = Math.min(s.sy, c.sy);
+  if (c.sx < s.sx) x = s.sx - w;
+  if (c.sy < s.sy) y = s.sy - h;
+  return { x, y, w, h, cols, rows };
+}
+
 const TREE_NAKED_PLAN_M = 4.0;   // plan footprint — matches ~4 m branch spread in 3D
 const TREE_NAKED_HEIGHT_M = 7.0; // 3D trunk+branch height (vertical only)
+const TREE_NAKED_RENDER_HEX = '#a89e8a'; // gray-tan branch meshes — must match in AI renders
 
 function ensureTreeNakedPlanSize(obj) {
   if (obj?.kind !== 'treeNaked') return;
@@ -3417,10 +3734,12 @@ function drawHandles(sx, sy, sw, sh) {
     ctx2.fillText(text, cx, cy + 1);
   }
   const wLabel = wM + ' m', hLabel = hM + ' m';
+  const hTw = ctx2.measureText(hLabel).width + 8;
+  const vOff = 3 + 6 + hTw / 2; // past west/east handle + pill half-width
   dimLabel(wLabel, sx + sw/2, sy - 9);       // top
   dimLabel(wLabel, sx + sw/2, sy + sh + 9);  // bottom
-  dimLabel(hLabel, sx - 9, sy + sh/2);       // left  
-  dimLabel(hLabel, sx + sw + 9, sy + sh/2);  // right
+  dimLabel(hLabel, sx - vOff, sy + sh/2);    // left
+  dimLabel(hLabel, sx + sw + vOff, sy + sh/2); // right
 
   ctx2.restore();
   updateHandlesDOM(sx, sy, sw, sh);
@@ -3558,14 +3877,26 @@ function drawPreview() {
     dimPill((x+x+w)/2, y-9, wM);
     dimPill(x+w+5+(ctx2.measureText(hM).width+8)/2, (y+y+h)/2, hM);
 
-  } else if (tool === 'grid') {
-    const x = Math.min(s.sx,c.sx), y = Math.min(s.sy,c.sy);
-    const w = Math.abs(c.sx-s.sx), h = Math.abs(c.sy-s.sy);
+  } else if (tool === 'grid' || tool === 'fgrid') {
+    const layout = gridLayoutFromDragScreen(s, c);
+    const { x, y, w, h, cols, rows } = layout;
     ctx2.strokeStyle = '#2a6dd4'; ctx2.lineWidth = 1; ctx2.setLineDash([3,2]);
-    ctx2.strokeRect(x,y,w,h);
-    const cols=3, rows=3;
-    for (let i=1;i<cols;i++) { const gx=x+(w/cols)*i; ctx2.beginPath();ctx2.moveTo(gx,y);ctx2.lineTo(gx,y+h);ctx2.stroke(); }
-    for (let i=1;i<rows;i++) { const gy=y+(h/rows)*i; ctx2.beginPath();ctx2.moveTo(x,gy);ctx2.lineTo(x+w,gy);ctx2.stroke(); }
+    ctx2.fillStyle = 'rgba(42,109,212,0.06)';
+    ctx2.fillRect(x, y, w, h);
+    ctx2.strokeRect(x, y, w, h);
+    ctx2.setLineDash([]);
+    for (let i = 1; i < cols; i++) {
+      const gx = x + (w / cols) * i;
+      ctx2.beginPath(); ctx2.moveTo(gx, y); ctx2.lineTo(gx, y + h); ctx2.stroke();
+    }
+    for (let i = 1; i < rows; i++) {
+      const gy = y + (h / rows) * i;
+      ctx2.beginPath(); ctx2.moveTo(x, gy); ctx2.lineTo(x + w, gy); ctx2.stroke();
+    }
+    const wM = (cols * GRID_DEFAULT_BAY_M).toFixed(1) + ' m';
+    const hM = (rows * GRID_DEFAULT_BAY_M).toFixed(1) + ' m';
+    dimPill(x + w / 2, y - 9, wM);
+    dimPill(x + w + 5 + (ctx2.measureText(hM).width + 8) / 2, y + h / 2, hM);
 
   } else if (tool === 'circle') {
     // Center = drawStart, radius = distance to cursor
@@ -3669,13 +4000,19 @@ const fillLight = new THREE.DirectionalLight(0xc8d8e8, 0.5);
 fillLight.position.set(-10, 4, -6);
 threeScene.add(fillLight);
 
-// Ground
-const groundGeo = new THREE.PlaneGeometry(60, 60);
+// Ground — large plane recenters on orbit target so it reads as infinite
+const GROUND_PLANE_SIZE = 400;
+const groundGeo = new THREE.PlaneGeometry(GROUND_PLANE_SIZE, GROUND_PLANE_SIZE);
 const groundMat = new THREE.MeshStandardMaterial({ color: 0xeeebd4, roughness: 0.95 });
 const ground = new THREE.Mesh(groundGeo, groundMat);
 ground.rotation.x = -Math.PI / 2;
 ground.receiveShadow = true;
 threeScene.add(ground);
+
+function updateInfiniteGround() {
+  ground.position.set(orbitTarget.x, 0, orbitTarget.z);
+  grid3D.position.set(orbitTarget.x, 0, orbitTarget.z);
+}
 
 // Viewport shadow toggle — sunLight + 2048² PCFSoft map is the main GPU cost
 let viewportShadowsEnabled = true;
@@ -3746,8 +4083,8 @@ document.getElementById('vp-shadow-wrap')?.addEventListener('mouseleave', () => 
   if (wrap) wrap.open = false;
 });
 
-// Grid helper
-const grid3D = new THREE.GridHelper(40, 40, 0xccccbb, 0xddddcc);
+// Grid helper — follows orbit target with the infinite ground plane
+const grid3D = new THREE.GridHelper(GROUND_PLANE_SIZE, 80, 0xccccbb, 0xddddcc);
 grid3D.material.opacity = 0.4; grid3D.material.transparent = true;
 threeScene.add(grid3D);
 
@@ -3904,6 +4241,7 @@ function buildSlabWithHoles(obj, holes, thickness, mat) {
   // Local Y=0 is the slab bottom; callers set mesh.position.y to that bottom elevation.
   const mesh = new THREE.Mesh(geo, mat);
   mesh.position.set((obj.x + obj.w/2 - CX) * SC, 0, (obj.y + obj.h/2 - CZ) * SC);
+  mesh.castShadow = true;
   mesh.receiveShadow = true;
   return mesh;
 }
@@ -4169,47 +4507,58 @@ function planStripHitsRoofVoid(strip, roofCutters, marginPx) {
   return roofCutters.some(v => rectsOverlap(strip, expandPlanRect(v, m)));
 }
 
-function pitchedJoistSlopeHitsVoid(alongWorld, sign, axis, halfSpan, SC, CX, CZ, cx, cz, roofCutters) {
+function pitchedJoistSlopePlanStrips(alongWorld, sign, axis, halfSpan, SC, CX, CZ, cx, cz, roofCutters) {
   const joistHalfPx = (ROOF_JOIST_W / 2) / SC;
   const halfSpanPx = halfSpan / SC;
-  const marginPx = mToWorld(ROOF_JOIST_EDGE_INSET);
   if (axis === 'z') {
     const ridgePy = cz / SC + CZ;
     const px = alongWorld / SC + CX;
     const y0 = sign > 0 ? ridgePy : ridgePy - halfSpanPx;
-    return planStripHitsRoofVoid(
-      { x: px - joistHalfPx, y: y0, w: ROOF_JOIST_W / SC, h: halfSpanPx },
-      roofCutters, marginPx
-    );
+    let strips = [{ x: px - joistHalfPx, y: y0, w: ROOF_JOIST_W / SC, h: halfSpanPx }];
+    return subtractRoofVoidCuts(strips, roofCutters, 0);
   }
   const ridgePx = cx / SC + CX;
   const py = alongWorld / SC + CZ;
   const x0 = sign > 0 ? ridgePx : ridgePx - halfSpanPx;
-  return planStripHitsRoofVoid(
-    { x: x0, y: py - joistHalfPx, w: halfSpanPx, h: ROOF_JOIST_W / SC },
-    roofCutters, marginPx
-  );
+  let strips = [{ x: x0, y: py - joistHalfPx, w: halfSpanPx, h: ROOF_JOIST_W / SC }];
+  return subtractRoofVoidCuts(strips, roofCutters, 0);
 }
 
-function addPitchedGablesAlongXWithVoids(span, rise, mat, fixedX, yBase, cz, roofCutters, SC, CX, CZ) {
-  const px = fixedX / SC + CX;
+function pitchedJoistPurlinPlanStrips(crossWorld, axis, ridgeRunLen, SC, CX, CZ, cx, cz, roofCutters) {
+  const joistHalfPx = (ROOF_JOIST_W / 2) / SC;
+  const ridgeLen = ridgeRunLen - 2 * ROOF_JOIST_EDGE_INSET;
+  if (ridgeLen <= 0) return [];
+  if (axis === 'z') {
+    const pz = crossWorld / SC + CZ;
+    const px0 = cx / SC + CX - ridgeLen / SC / 2;
+    let strips = [{ x: px0, y: pz - joistHalfPx, w: ridgeLen / SC, h: ROOF_JOIST_W / SC }];
+    return subtractRoofVoidCuts(strips, roofCutters, 0);
+  }
+  const px = crossWorld / SC + CX;
+  const py0 = cz / SC + CZ - ridgeLen / SC / 2;
+  let strips = [{ x: px - joistHalfPx, y: py0, w: ROOF_JOIST_W / SC, h: ridgeLen / SC }];
+  return subtractRoofVoidCuts(strips, roofCutters, 0);
+}
+
+function addPitchedGablesAlongXWithVoids(span, rise, mat, innerX, yBase, cz, outwardSign, baseDrop, roofCutters, SC, CX, CZ) {
+  const px = innerX / SC + CX;
   const centerPy = cz / SC + CZ;
   const halfSpanPx = (span / 2) / SC;
   let strips = [{ x: px - 0.01, y: centerPy - halfSpanPx, w: 0.02, h: span / SC }];
   strips = subtractRoofVoidCuts(strips, roofCutters, 0);
   strips.forEach(seg => {
-    addPitchedGableAlongX(seg.h * SC, rise, mat, fixedX, yBase, ((seg.y + seg.h / 2) - CZ) * SC);
+    addPitchedGableAlongX(seg.h * SC, rise, mat, innerX, yBase, ((seg.y + seg.h / 2) - CZ) * SC, outwardSign, baseDrop);
   });
 }
 
-function addPitchedGablesAlongZWithVoids(span, rise, mat, cx, yBase, fixedZ, roofCutters, SC, CX, CZ) {
-  const py = fixedZ / SC + CZ;
+function addPitchedGablesAlongZWithVoids(span, rise, mat, cx, yBase, innerZ, outwardSign, baseDrop, roofCutters, SC, CX, CZ) {
+  const py = innerZ / SC + CZ;
   const centerPx = cx / SC + CX;
   const halfSpanPx = (span / 2) / SC;
   let strips = [{ x: centerPx - halfSpanPx, y: py - 0.01, w: span / SC, h: 0.02 }];
   strips = subtractRoofVoidCuts(strips, roofCutters, 0);
   strips.forEach(seg => {
-    addPitchedGableAlongZ(seg.w * SC, rise, mat, ((seg.x + seg.w / 2) - CX) * SC, yBase, fixedZ);
+    addPitchedGableAlongZ(seg.w * SC, rise, mat, ((seg.x + seg.w / 2) - CX) * SC, yBase, innerZ, outwardSign, baseDrop);
   });
 }
 
@@ -4225,6 +4574,39 @@ function migrateGridRoofDefaults(obj) {
   if (obj.hasRoof && obj.roofThickness == null) obj.roofThickness = 0.15;
   if (obj.hasRoof && obj.roofOffset == null) obj.roofOffset = 0;
   if (obj.hasRoof && obj.roofJoists == null) obj.roofJoists = false;
+  if (obj.roofJoists && obj.roofJoistsDirX == null) obj.roofJoistsDirX = true;
+  if (obj.roofJoists && obj.roofJoistsDirY == null) obj.roofJoistsDirY = true;
+  migratePitchedRoofOffsetZero(obj);
+}
+
+// Pitched roof UI offset 0 sits at former physical -0.85 m (below top slab).
+const PITCHED_ROOF_OFFSET_BASE = -0.85;
+
+function migratePitchedRoofOffsetZero(obj) {
+  if ((obj.roofType || 'flat') !== 'pitched') return;
+  if (obj._pitchedRoofOffsetZeroAt === PITCHED_ROOF_OFFSET_BASE) return;
+  if (obj._pitchedRoofOffsetZeroAt === -0.8) {
+    obj._pitchedRoofOffsetZeroAt = PITCHED_ROOF_OFFSET_BASE;
+    return;
+  }
+  obj.roofOffset = (obj.roofOffset != null ? obj.roofOffset : 0) - PITCHED_ROOF_OFFSET_BASE;
+  obj._pitchedRoofOffsetZeroAt = PITCHED_ROOF_OFFSET_BASE;
+}
+
+function pitchedRoofOffsetEffective(obj) {
+  return (obj.roofOffset != null ? obj.roofOffset : 0) + PITCHED_ROOF_OFFSET_BASE;
+}
+
+function roofJoistsAlongX(obj) {
+  return !!(obj?.roofJoists && obj.roofJoistsDirX !== false);
+}
+
+function roofJoistsAlongY(obj) {
+  return !!(obj?.roofJoists && obj.roofJoistsDirY !== false);
+}
+
+function anyRoofJoists(obj) {
+  return roofJoistsAlongX(obj) || roofJoistsAlongY(obj);
 }
 
 function gridRoofColor(obj) {
@@ -4241,29 +4623,54 @@ function selectedGridObj() {
 }
 
 const GRID_FACADE_OUTSET = 0.15; // outer column face / facade plane (matches COL_HALF in 3D facades)
+const GABLE_THICK = 0.1;
 
-function addPitchedGableAlongZ(span, rise, mat, cx, yBase, fixedZ) {
-  const hw = span / 2;
+function buildGablePrismGeometry(span, rise, axis, outwardSign, baseDrop) {
+  baseDrop = baseDrop || 0;
+  const hs = span / 2;
+  const t = GABLE_THICK * (outwardSign >= 0 ? 1 : -1);
+  const inner = baseDrop > 0.001
+    ? (axis === 'x'
+      ? [[0, -baseDrop, -hs], [0, -baseDrop, hs], [0, 0, hs], [0, rise, 0], [0, 0, -hs]]
+      : [[-hs, -baseDrop, 0], [hs, -baseDrop, 0], [hs, 0, 0], [0, rise, 0], [-hs, 0, 0]])
+    : (axis === 'x'
+      ? [[0, 0, -hs], [0, 0, hs], [0, rise, 0]]
+      : [[-hs, 0, 0], [hs, 0, 0], [0, rise, 0]]);
+  const outer = inner.map(p => axis === 'x' ? [p[0] + t, p[1], p[2]] : [p[0], p[1], p[2] + t]);
+  const n = inner.length;
+  const positions = [];
+  inner.forEach(p => positions.push(...p));
+  outer.forEach(p => positions.push(...p));
+  const indices = [];
+  for (let i = 1; i < n - 1; i++) {
+    indices.push(0, i, i + 1);
+    indices.push(n, n + i + 1, n + i);
+  }
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n;
+    indices.push(i, j, n + j, i, n + j, n + i);
+  }
   const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array([
-    -hw, 0, 0,  hw, 0, 0,  0, rise, 0
-  ]), 3));
+  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(positions), 3));
+  geo.setIndex(indices);
   geo.computeVertexNormals();
+  return geo;
+}
+
+function addPitchedGableAlongZ(span, rise, mat, cx, yBase, innerZ, outwardSign, baseDrop) {
+  const geo = buildGablePrismGeometry(span, rise, 'z', outwardSign, baseDrop);
   const mesh = new THREE.Mesh(geo, mat);
-  mesh.position.set(cx, yBase, fixedZ);
+  mesh.position.set(cx, yBase, innerZ);
+  mesh.castShadow = true;
   mesh.receiveShadow = true;
   threeScene.add(mesh); building3D.push(mesh);
 }
 
-function addPitchedGableAlongX(span, rise, mat, fixedX, yBase, cz) {
-  const hd = span / 2;
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array([
-    0, 0, -hd,  0, 0, hd,  0, rise, 0
-  ]), 3));
-  geo.computeVertexNormals();
+function addPitchedGableAlongX(span, rise, mat, innerX, yBase, cz, outwardSign, baseDrop) {
+  const geo = buildGablePrismGeometry(span, rise, 'x', outwardSign, baseDrop);
   const mesh = new THREE.Mesh(geo, mat);
-  mesh.position.set(fixedX, yBase, cz);
+  mesh.position.set(innerX, yBase, cz);
+  mesh.castShadow = true;
   mesh.receiveShadow = true;
   threeScene.add(mesh); building3D.push(mesh);
 }
@@ -4334,48 +4741,145 @@ function roofPanelLocalToWorld(local, panelPos, panelQuat) {
   return local.clone().applyQuaternion(panelQuat).add(panelPos);
 }
 
-function addPitchedRoofJoists(spanLen, halfSpan, pitch, roofThick, yOff, mat, cx, yBase, cz, axis, roofCutters, SC, CX, CZ) {
+function addPitchedRoofJoists(spanLen, halfSpan, pitch, roofThick, yOff, mat, cx, yBase, cz, axis, roofCutters, SC, CX, CZ, opts) {
+  opts = opts || {};
+  const parallelToRidge = !!opts.parallelToRidge;
+  const includeRidge = opts.includeRidge !== false;
+  const ridgeRunLen = opts.ridgeRunLen != null ? opts.ridgeRunLen : spanLen;
   const rise = halfSpan * Math.tan(pitch);
   const angle = Math.atan2(rise, halfSpan);
   const slopeLen = halfSpan / Math.cos(pitch);
   const insetAlongSlope = ROOF_JOIST_EDGE_INSET / Math.cos(angle);
-  const joistLen = slopeLen - insetAlongSlope;
   const ridgeClose = (roofThick * Math.sin(angle)) / 2;
   const roofCenterY = yBase + rise / 2 + yOff + ridgeClose;
-  const count = Math.max(2, Math.round(spanLen / ROOF_JOIST_SPACING) + 1);
-  const start = axis === 'z' ? cx - spanLen / 2 : cz - spanLen / 2;
+
+  if (parallelToRidge) {
+    const ridgeCross = axis === 'z' ? cz : cx;
+    const innerSlopeSpan = halfSpan - ROOF_JOIST_EDGE_INSET;
+    if (innerSlopeSpan <= 0) return;
+    const count = Math.max(2, Math.round((halfSpan - 2 * ROOF_JOIST_EDGE_INSET) / ROOF_JOIST_SPACING) + 1);
+    const cosA = Math.cos(angle);
+    const centerLocalY = -roofThick / 2 - ROOF_JOIST_H / 2;
+
+    for (const sign of [-1, 1]) {
+      const crossStart = sign > 0
+        ? ridgeCross + ROOF_JOIST_EDGE_INSET
+        : ridgeCross - halfSpan + ROOF_JOIST_EDGE_INSET;
+      const crossEnd = sign > 0
+        ? ridgeCross + halfSpan - ROOF_JOIST_EDGE_INSET
+        : ridgeCross - ROOF_JOIST_EDGE_INSET;
+
+      for (let i = 0; i < count; i++) {
+        const cross = count === 1 ? (crossStart + crossEnd) / 2 : crossStart + (i / (count - 1)) * (crossEnd - crossStart);
+        const strips = pitchedJoistPurlinPlanStrips(cross, axis, ridgeRunLen, SC, CX, CZ, cx, cz, roofCutters);
+        if (!strips.length) continue;
+
+        let panelPos, panelQuat;
+        if (axis === 'z') {
+          panelPos = new THREE.Vector3(cx, roofCenterY, cz + sign * halfSpan / 2);
+          panelQuat = new THREE.Quaternion().setFromEuler(new THREE.Euler(sign * angle, 0, 0));
+        } else {
+          panelPos = new THREE.Vector3(cx + sign * halfSpan / 2, roofCenterY, cz);
+          panelQuat = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, -sign * angle));
+        }
+
+        const panelCenterCross = axis === 'z' ? (cz + sign * halfSpan / 2) : (cx + sign * halfSpan / 2);
+        const horizOffset = cross - panelCenterCross;
+        const localCross = horizOffset / cosA;
+
+        strips.forEach(seg => {
+          const segLen = (axis === 'z' ? seg.w : seg.h) * SC;
+          if (segLen < 0.01) return;
+          const segCenterAlong = axis === 'z'
+            ? ((seg.x + seg.w / 2) - CX) * SC
+            : ((seg.y + seg.h / 2) - CZ) * SC;
+          let localCenter, geo;
+          if (axis === 'z') {
+            localCenter = new THREE.Vector3(segCenterAlong - cx, centerLocalY, localCross);
+            geo = new THREE.BoxGeometry(segLen, ROOF_JOIST_H, ROOF_JOIST_W);
+          } else {
+            localCenter = new THREE.Vector3(localCross, centerLocalY, segCenterAlong - cz);
+            geo = new THREE.BoxGeometry(ROOF_JOIST_W, ROOF_JOIST_H, segLen);
+          }
+          const mesh = new THREE.Mesh(geo, mat);
+          mesh.position.copy(roofPanelLocalToWorld(localCenter, panelPos, panelQuat));
+          mesh.setRotationFromQuaternion(panelQuat);
+          mesh.castShadow = false;
+          mesh.receiveShadow = true;
+          threeScene.add(mesh); building3D.push(mesh);
+        });
+      }
+    }
+    return;
+  }
+
+  const innerSpan = spanLen - 2 * ROOF_JOIST_EDGE_INSET;
+  if (innerSpan <= 0) return;
+  const count = Math.max(2, Math.round(innerSpan / ROOF_JOIST_SPACING) + 1);
+  const ridgeAlong = axis === 'z' ? cx : cz;
+  const alongStart = ridgeAlong - innerSpan / 2;
+  const alongEnd = ridgeAlong + innerSpan / 2;
+  const cosA = Math.cos(angle);
+  const halfSpanPx = halfSpan / SC;
+  const ridgePlan = axis === 'z' ? (cz / SC + CZ) : (cx / SC + CX);
 
   for (let i = 0; i < count; i++) {
-    const along = count === 1 ? start + spanLen / 2 : start + (i / (count - 1)) * spanLen;
+    const along = count === 1 ? ridgeAlong : alongStart + (i / (count - 1)) * (alongEnd - alongStart);
     for (const sign of [-1, 1]) {
-      if (pitchedJoistSlopeHitsVoid(along, sign, axis, halfSpan, SC, CX, CZ, cx, cz, roofCutters)) continue;
-      const ridgeLocalZ = -sign * slopeLen / 2;
-      const eaveLocalZ = sign * slopeLen / 2;
-      const joistEaveLocalZ = eaveLocalZ - sign * insetAlongSlope;
-      const centerLocalZ = (ridgeLocalZ + joistEaveLocalZ) / 2;
-      const centerLocalY = -roofThick / 2 - ROOF_JOIST_H / 2;
+      const strips = pitchedJoistSlopePlanStrips(along, sign, axis, halfSpan, SC, CX, CZ, cx, cz, roofCutters);
+      if (!strips.length) continue;
 
-      let panelPos, panelQuat, localCenter, geo;
+      let panelPos, panelQuat;
       if (axis === 'z') {
         panelPos = new THREE.Vector3(cx, roofCenterY, cz + sign * halfSpan / 2);
         panelQuat = new THREE.Quaternion().setFromEuler(new THREE.Euler(sign * angle, 0, 0));
-        localCenter = new THREE.Vector3(along - cx, centerLocalY, centerLocalZ);
-        geo = new THREE.BoxGeometry(ROOF_JOIST_W, ROOF_JOIST_H, joistLen);
       } else {
         panelPos = new THREE.Vector3(cx + sign * halfSpan / 2, roofCenterY, cz);
         panelQuat = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, -sign * angle));
-        localCenter = new THREE.Vector3(centerLocalZ, centerLocalY, along - cz);
-        geo = new THREE.BoxGeometry(joistLen, ROOF_JOIST_H, ROOF_JOIST_W);
       }
 
-      const mesh = new THREE.Mesh(geo, mat);
-      mesh.position.copy(roofPanelLocalToWorld(localCenter, panelPos, panelQuat));
-      mesh.setRotationFromQuaternion(panelQuat);
-      mesh.castShadow = false;
-      mesh.receiveShadow = true;
-      threeScene.add(mesh); building3D.push(mesh);
+      const panelCenterCross = axis === 'z' ? (cz + sign * halfSpan / 2) : (cx + sign * halfSpan / 2);
+      const centerLocalY = -roofThick / 2 - ROOF_JOIST_H / 2;
+      const eavePlan = sign > 0 ? ridgePlan + halfSpanPx : ridgePlan - halfSpanPx;
+
+      strips.forEach(seg => {
+        const horizSpan = (axis === 'z' ? seg.h : seg.w) * SC;
+        if (horizSpan < 0.01) return;
+        let segSlopeLen = horizSpan / cosA;
+        const segEavePlan = axis === 'z'
+          ? (sign > 0 ? seg.y + seg.h : seg.y)
+          : (sign > 0 ? seg.x + seg.w : seg.x);
+        const touchesEave = Math.abs(segEavePlan - eavePlan) < 1e-5;
+        if (touchesEave) segSlopeLen = Math.max(0, segSlopeLen - insetAlongSlope);
+        if (segSlopeLen < 0.01) return;
+
+        const segCenterPlan = axis === 'z' ? (seg.y + seg.h / 2) : (seg.x + seg.w / 2);
+        const segCenterCross = axis === 'z'
+          ? ((segCenterPlan - CZ) * SC)
+          : ((segCenterPlan - CX) * SC);
+        const horizOffset = segCenterCross - panelCenterCross;
+        const localCross = horizOffset / cosA;
+
+        let localCenter, geo;
+        if (axis === 'z') {
+          localCenter = new THREE.Vector3(along - cx, centerLocalY, localCross);
+          geo = new THREE.BoxGeometry(ROOF_JOIST_W, ROOF_JOIST_H, segSlopeLen);
+        } else {
+          localCenter = new THREE.Vector3(localCross, centerLocalY, along - cz);
+          geo = new THREE.BoxGeometry(segSlopeLen, ROOF_JOIST_H, ROOF_JOIST_W);
+        }
+
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.position.copy(roofPanelLocalToWorld(localCenter, panelPos, panelQuat));
+        mesh.setRotationFromQuaternion(panelQuat);
+        mesh.castShadow = false;
+        mesh.receiveShadow = true;
+        threeScene.add(mesh); building3D.push(mesh);
+      });
     }
   }
+
+  if (!includeRidge) return;
 
   // Ridge board — sit below ridge underside (use +Z slope panel at ridge end).
   const ridgePanelPos = axis === 'z'
@@ -4417,39 +4921,174 @@ function addPitchedRoofJoists(spanLen, halfSpan, pitch, roofThick, yOff, mat, cx
   });
 }
 
-function addFlatRoofJoists(rw, rd, roofThick, yOff, mat, cx, deckTopY, cz, rx, ry, SC, CX, CZ, roofCutters) {
+function addFlatRoofJoists(rw, rd, roofThick, yOff, mat, cx, deckTopY, cz, rx, ry, SC, CX, CZ, roofCutters, alongX, alongY) {
   const inset = ROOF_JOIST_EDGE_INSET;
   const insetPx = mToWorld(inset);
   const innerW = rw - 2 * inset;
   const innerD = rd - 2 * inset;
   if (innerW <= 0 || innerD <= 0) return;
-  // Joists stand on deck; top face meets roof slab underside.
   const yJ = deckTopY + ROOF_JOIST_H / 2;
-  const count = Math.max(2, Math.round(innerW / ROOF_JOIST_SPACING) + 1);
-  const x0 = cx - innerW / 2;
   const joistHalfPx = (ROOF_JOIST_W / 2) / SC;
   const joistWPx = ROOF_JOIST_W / SC;
+  const innerWPx = innerW / SC;
   const innerDPx = innerD / SC;
   const runY0 = ry + insetPx;
+  const runX0 = rx + insetPx;
 
-  for (let i = 0; i < count; i++) {
-    const xWorld = count === 1 ? cx : x0 + (i / (count - 1)) * innerW;
-    const xPx = xWorld / SC + CX;
-    let strips = [{ x: xPx - joistHalfPx, y: runY0, w: joistWPx, h: innerDPx }];
-    (roofCutters || []).forEach(v => {
-      strips = subtractRectCuts(strips, v, 0.01);
-    });
-    if (strips.length === 0) continue;
-    strips.forEach(seg => {
-      const segLen = seg.h * SC;
-      if (segLen < 0.01) return;
-      const segCz = ((seg.y + seg.h / 2) - CZ) * SC;
-      const mesh = new THREE.Mesh(new THREE.BoxGeometry(ROOF_JOIST_W, ROOF_JOIST_H, segLen), mat);
-      mesh.position.set(xWorld, yJ, segCz);
-      mesh.castShadow = false;
-      mesh.receiveShadow = true;
-      threeScene.add(mesh); building3D.push(mesh);
-    });
+  if (alongY) {
+    const count = Math.max(2, Math.round(innerW / ROOF_JOIST_SPACING) + 1);
+    const x0 = cx - innerW / 2;
+    for (let i = 0; i < count; i++) {
+      const xWorld = count === 1 ? cx : x0 + (i / (count - 1)) * innerW;
+      const xPx = xWorld / SC + CX;
+      let strips = [{ x: xPx - joistHalfPx, y: runY0, w: joistWPx, h: innerDPx }];
+      (roofCutters || []).forEach(v => { strips = subtractRectCuts(strips, v, 0.01); });
+      strips.forEach(seg => {
+        const segLen = seg.h * SC;
+        if (segLen < 0.01) return;
+        const segCz = ((seg.y + seg.h / 2) - CZ) * SC;
+        const mesh = new THREE.Mesh(new THREE.BoxGeometry(ROOF_JOIST_W, ROOF_JOIST_H, segLen), mat);
+        mesh.position.set(xWorld, yJ, segCz);
+        mesh.castShadow = false;
+        mesh.receiveShadow = true;
+        threeScene.add(mesh); building3D.push(mesh);
+      });
+    }
+  }
+
+  if (alongX) {
+    const count = Math.max(2, Math.round(innerD / ROOF_JOIST_SPACING) + 1);
+    const y0 = cz - innerD / 2;
+    for (let i = 0; i < count; i++) {
+      const zWorld = count === 1 ? cz : y0 + (i / (count - 1)) * innerD;
+      const yPx = zWorld / SC + CZ;
+      let strips = [{ x: runX0, y: yPx - joistHalfPx, w: innerWPx, h: joistWPx }];
+      (roofCutters || []).forEach(v => { strips = subtractRectCuts(strips, v, 0.01); });
+      strips.forEach(seg => {
+        const segLen = seg.w * SC;
+        if (segLen < 0.01) return;
+        const segCx = ((seg.x + seg.w / 2) - CX) * SC;
+        const mesh = new THREE.Mesh(new THREE.BoxGeometry(segLen, ROOF_JOIST_H, ROOF_JOIST_W), mat);
+        mesh.position.set(segCx, yJ, zWorld);
+        mesh.castShadow = false;
+        mesh.receiveShadow = true;
+        threeScene.add(mesh); building3D.push(mesh);
+      });
+    }
+  }
+}
+
+function verticalSegmentsInPoly(poly, x) {
+  const ys = [];
+  const n = poly.length;
+  for (let i = 0; i < n; i++) {
+    const a = poly[i], b = poly[(i + 1) % n];
+    const x1 = a.x, x2 = b.x, y1 = a.y, y2 = b.y;
+    if (Math.abs(x2 - x1) < 1e-9) {
+      if (Math.abs(x - x1) < 1e-6) { ys.push(y1, y2); }
+      continue;
+    }
+    if (x < Math.min(x1, x2) - 1e-9 || x > Math.max(x1, x2) + 1e-9) continue;
+    const t = (x - x1) / (x2 - x1);
+    if (t >= -1e-9 && t <= 1 + 1e-9) ys.push(y1 + t * (y2 - y1));
+  }
+  if (ys.length < 2) return [];
+  ys.sort((a, b) => a - b);
+  const segs = [];
+  for (let i = 0; i + 1 < ys.length; i += 2) {
+    const y0 = ys[i], y1 = ys[i + 1];
+    if (y1 - y0 > 1e-6) segs.push({ y0, y1 });
+  }
+  return segs;
+}
+
+function horizontalSegmentsInPoly(poly, y) {
+  const xs = [];
+  const n = poly.length;
+  for (let i = 0; i < n; i++) {
+    const a = poly[i], b = poly[(i + 1) % n];
+    const x1 = a.x, x2 = b.x, y1 = a.y, y2 = b.y;
+    if (Math.abs(y2 - y1) < 1e-9) {
+      if (Math.abs(y - y1) < 1e-6) { xs.push(x1, x2); }
+      continue;
+    }
+    if (y < Math.min(y1, y2) - 1e-9 || y > Math.max(y1, y2) + 1e-9) continue;
+    const t = (y - y1) / (y2 - y1);
+    if (t >= -1e-9 && t <= 1 + 1e-9) xs.push(x1 + t * (x2 - x1));
+  }
+  if (xs.length < 2) return [];
+  xs.sort((a, b) => a - b);
+  const segs = [];
+  for (let i = 0; i + 1 < xs.length; i += 2) {
+    const x0 = xs[i], x1 = xs[i + 1];
+    if (x1 - x0 > 1e-6) segs.push({ x0, x1 });
+  }
+  return segs;
+}
+
+function addFlatRoofJoistsInPoly(roofPts, deckTopY, mat, SC, CX, CZ, roofCutters, alongX, alongY) {
+  if (roofPts.length < 3) return;
+  const signedArea = fgridEdgePolySignedAreaWorld(roofPts);
+  const insetPoly = offsetPolygonWorldPts(roofPts, -mToWorld(ROOF_JOIST_EDGE_INSET), signedArea);
+  if (insetPoly.length < 3) return;
+  const yJ = deckTopY + ROOF_JOIST_H / 2;
+  const joistHalfPx = (ROOF_JOIST_W / 2) / SC;
+  const joistWPx = ROOF_JOIST_W / SC;
+
+  if (alongY) {
+    const xs = insetPoly.map(p => p.x);
+    const minX = Math.min(...xs), maxX = Math.max(...xs);
+    const spanMetres = (maxX - minX) * SC;
+    if (spanMetres > 0) {
+      const count = Math.max(2, Math.round(spanMetres / ROOF_JOIST_SPACING) + 1);
+      for (let i = 0; i < count; i++) {
+        const xPlan = count === 1 ? (minX + maxX) / 2 : minX + (i / (count - 1)) * (maxX - minX);
+        const xWorld = (xPlan - CX) * SC;
+        const ySegs = verticalSegmentsInPoly(insetPoly, xPlan);
+        for (const seg of ySegs) {
+          let strips = [{ x: xPlan - joistHalfPx, y: seg.y0, w: joistWPx, h: seg.y1 - seg.y0 }];
+          (roofCutters || []).forEach(v => { strips = subtractRectCuts(strips, v, 0.01); });
+          strips.forEach(s => {
+            const sLen = s.h * SC;
+            if (sLen < 0.01) return;
+            const sCz = ((s.y + s.h / 2) - CZ) * SC;
+            const mesh = new THREE.Mesh(new THREE.BoxGeometry(ROOF_JOIST_W, ROOF_JOIST_H, sLen), mat);
+            mesh.position.set(xWorld, yJ, sCz);
+            mesh.castShadow = false;
+            mesh.receiveShadow = true;
+            threeScene.add(mesh); building3D.push(mesh);
+          });
+        }
+      }
+    }
+  }
+
+  if (alongX) {
+    const ys = insetPoly.map(p => p.y);
+    const minY = Math.min(...ys), maxY = Math.max(...ys);
+    const spanMetres = (maxY - minY) * SC;
+    if (spanMetres > 0) {
+      const count = Math.max(2, Math.round(spanMetres / ROOF_JOIST_SPACING) + 1);
+      for (let i = 0; i < count; i++) {
+        const yPlan = count === 1 ? (minY + maxY) / 2 : minY + (i / (count - 1)) * (maxY - minY);
+        const zWorld = (yPlan - CZ) * SC;
+        const xSegs = horizontalSegmentsInPoly(insetPoly, yPlan);
+        for (const seg of xSegs) {
+          let strips = [{ x: seg.x0, y: yPlan - joistHalfPx, w: seg.x1 - seg.x0, h: joistWPx }];
+          (roofCutters || []).forEach(v => { strips = subtractRectCuts(strips, v, 0.01); });
+          strips.forEach(s => {
+            const sLen = s.w * SC;
+            if (sLen < 0.01) return;
+            const sCx = ((s.x + s.w / 2) - CX) * SC;
+            const mesh = new THREE.Mesh(new THREE.BoxGeometry(sLen, ROOF_JOIST_H, ROOF_JOIST_W), mat);
+            mesh.position.set(sCx, yJ, zWorld);
+            mesh.castShadow = false;
+            mesh.receiveShadow = true;
+            threeScene.add(mesh); building3D.push(mesh);
+          });
+        }
+      }
+    }
   }
 }
 
@@ -4464,6 +5103,7 @@ function buildGridRoof3D(obj, floors, fh, SC, CX, CZ, slabThick, allObjs) {
   const roofType = obj.roofType || 'flat';
   const roofThick = Math.max(0.02, obj.roofThickness != null ? obj.roofThickness : 0.15);
   const yOff = obj.roofOffset != null ? obj.roofOffset : 0;
+  const pitchedYOff = pitchedRoofOffsetEffective(obj);
   const cols = obj.cols || 3, rows = obj.rows || 3;
   const cx = (obj.x + obj.w / 2 - CX) * SC;
   const cz = (obj.y + obj.h / 2 - CZ) * SC;
@@ -4480,23 +5120,34 @@ function buildGridRoof3D(obj, floors, fh, SC, CX, CZ, slabThick, allObjs) {
     const ridgeAlongX = obj.w >= obj.h;
     const ridgeY = (ridgeAlongX ? fd / 2 : fw / 2) * Math.tan(pitch);
     const joistMat = getMat('#8b6c52', 0.82);
+    const gableBaseDrop = obj.hasSlab ? slabThick : 0;
 
-    if (obj.roofJoists) {
+    if (anyRoofJoists(obj)) {
       if (ridgeAlongX) {
-        addPitchedRoofJoists(w, d / 2, pitch, roofThick, yOff, joistMat, cx, yBase, cz, 'z', [], SC, CX, CZ);
+        if (roofJoistsAlongY(obj)) {
+          addPitchedRoofJoists(w, d / 2, pitch, roofThick, pitchedYOff, joistMat, cx, yBase, cz, 'z', roofCutters, SC, CX, CZ, { includeRidge: true });
+        }
+        if (roofJoistsAlongX(obj)) {
+          addPitchedRoofJoists(d, d / 2, pitch, roofThick, pitchedYOff, joistMat, cx, yBase, cz, 'z', roofCutters, SC, CX, CZ, { parallelToRidge: true, ridgeRunLen: w, includeRidge: false });
+        }
       } else {
-        addPitchedRoofJoists(d, w / 2, pitch, roofThick, yOff, joistMat, cx, yBase, cz, 'x', [], SC, CX, CZ);
+        if (roofJoistsAlongX(obj)) {
+          addPitchedRoofJoists(d, w / 2, pitch, roofThick, pitchedYOff, joistMat, cx, yBase, cz, 'x', roofCutters, SC, CX, CZ, { includeRidge: true });
+        }
+        if (roofJoistsAlongY(obj)) {
+          addPitchedRoofJoists(w, w / 2, pitch, roofThick, pitchedYOff, joistMat, cx, yBase, cz, 'x', roofCutters, SC, CX, CZ, { parallelToRidge: true, ridgeRunLen: d, includeRidge: false });
+        }
       }
     }
 
     if (ridgeAlongX) {
-      addPitchedSlopePanels(w, d / 2, pitch, roofThick, yOff, roofMat, cx, yBase, cz, 'z');
-      addPitchedGableAlongX(fd, ridgeY, gableMat, cx - fw / 2 - GRID_FACADE_OUTSET, yBase, cz);
-      addPitchedGableAlongX(fd, ridgeY, gableMat, cx + fw / 2 + GRID_FACADE_OUTSET, yBase, cz);
+      addPitchedSlopePanels(w, d / 2, pitch, roofThick, pitchedYOff, roofMat, cx, yBase, cz, 'z');
+      addPitchedGableAlongX(fd, ridgeY, gableMat, cx - fw / 2 - GRID_FACADE_OUTSET, yBase, cz, -1, gableBaseDrop);
+      addPitchedGableAlongX(fd, ridgeY, gableMat, cx + fw / 2 + GRID_FACADE_OUTSET, yBase, cz, 1, gableBaseDrop);
     } else {
-      addPitchedSlopePanels(d, w / 2, pitch, roofThick, yOff, roofMat, cx, yBase, cz, 'x');
-      addPitchedGableAlongZ(fw, ridgeY, gableMat, cx, yBase, cz - fd / 2 - GRID_FACADE_OUTSET);
-      addPitchedGableAlongZ(fw, ridgeY, gableMat, cx, yBase, cz + fd / 2 + GRID_FACADE_OUTSET);
+      addPitchedSlopePanels(d, w / 2, pitch, roofThick, pitchedYOff, roofMat, cx, yBase, cz, 'x');
+      addPitchedGableAlongZ(fw, ridgeY, gableMat, cx, yBase, cz - fd / 2 - GRID_FACADE_OUTSET, -1, gableBaseDrop);
+      addPitchedGableAlongZ(fw, ridgeY, gableMat, cx, yBase, cz + fd / 2 + GRID_FACADE_OUTSET, 1, gableBaseDrop);
     }
     return;
   }
@@ -4505,21 +5156,14 @@ function buildGridRoof3D(obj, floors, fh, SC, CX, CZ, slabThick, allObjs) {
   const joistMat = getMat('#8b6c52', 0.82);
   const roofHost = { x: rx, y: ry, w: rw, h: rh };
   const deckTopY = yBase + yOff;
-  const roofBottomY = deckTopY + (obj.roofJoists ? ROOF_JOIST_H : 0);
+  const roofBottomY = deckTopY + (anyRoofJoists(obj) ? ROOF_JOIST_H : 0);
   if (obj.edgePoly?.length >= 3) {
-    const poly3 = obj.edgePoly;
-    const centC = poly3.reduce((s, p) => s + p.c, 0) / poly3.length;
-    const centR = poly3.reduce((s, p) => s + p.r, 0) / poly3.length;
-    const scale = 1 + (2 * ohPx) / Math.min(obj.w, obj.h);
-    const s = new THREE.Shape();
-    poly3.forEach((pt, pi) => {
-      const ec = centC + (pt.c - centC) * scale;
-      const er = centR + (pt.r - centR) * scale;
-      const px = (obj.x + (ec / cols) * obj.w - CX) * SC;
-      const pz = -((obj.y + (er / rows) * obj.h - CZ) * SC);
-      if (pi === 0) s.moveTo(px, pz); else s.lineTo(px, pz);
-    });
-    s.closePath();
+    const roofPts = offsetFgridEdgePolyWorld(obj, overhangM);
+    if (anyRoofJoists(obj) && roofPts.length >= 3 && roofType !== 'pitched') {
+      addFlatRoofJoistsInPoly(roofPts, deckTopY, joistMat, SC, CX, CZ, roofCutters,
+        roofJoistsAlongX(obj), roofJoistsAlongY(obj));
+    }
+    const s = fgridWorldPolyToThreeShape(roofPts, CX, CZ, SC);
     if (roofCutters.length > 0) {
       roofCutters.forEach(v => {
         const hole = new THREE.Path();
@@ -4541,7 +5185,10 @@ function buildGridRoof3D(obj, floors, fh, SC, CX, CZ, slabThick, allObjs) {
     threeScene.add(roof); building3D.push(roof);
   } else {
     const flatW = rw * SC, flatD = rh * SC;
-    if (obj.roofJoists) addFlatRoofJoists(flatW, flatD, roofThick, yOff, joistMat, cx, deckTopY, cz, rx, ry, SC, CX, CZ, roofCutters);
+    if (anyRoofJoists(obj)) {
+      addFlatRoofJoists(flatW, flatD, roofThick, yOff, joistMat, cx, deckTopY, cz, rx, ry, SC, CX, CZ, roofCutters,
+        roofJoistsAlongX(obj), roofJoistsAlongY(obj));
+    }
     if (roofCutters.length > 0) {
       const roof = buildSlabWithHoles(roofHost, roofCutters, roofThick, roofMat);
       if (roof) {
@@ -4806,6 +5453,7 @@ function rebuild3D() {
         if (!cutThisFloor) {
           const slab = new THREE.Mesh(new THREE.BoxGeometry(obj.w*SC+0.05, 0.08, obj.h*SC+0.05), slabMat);
           slab.position.set(mcx, f*fh, mcz);
+          slab.castShadow = true; slab.receiveShadow = true;
           threeScene.add(slab); building3D.push(slab);
         } else {
           const slab = buildSlabWithHoles(obj, slabHoles, 0.08, slabMat);
@@ -4840,7 +5488,7 @@ function rebuild3D() {
           const cz = (obj.y + obj.h / 2 - CZ) * SC;
           const slab = new THREE.Mesh(new THREE.BoxGeometry(obj.w * SC, 0.3, obj.h * SC), mat);
           slab.position.set(cx, slabY, cz);
-          slab.receiveShadow = true;
+          slab.castShadow = true; slab.receiveShadow = true;
           threeScene.add(slab); building3D.push(slab);
         } else {
           const slab = buildSlabWithHoles(obj, activeHoles, 0.3, mat);
@@ -5019,6 +5667,7 @@ function rebuild3D() {
             const useCut = slabCutters.length > 0;
             const slab = new THREE.Mesh(useCut ? geomCut : geomSolid, slabMat);
             slab.position.set(0, f * fh, 0);
+            slab.castShadow = true; slab.receiveShadow = true;
             threeScene.add(slab); building3D.push(slab);
           }
         } else {
@@ -5027,6 +5676,7 @@ function rebuild3D() {
               const m2 = new THREE.Mesh(
                 new THREE.BoxGeometry(obj.w*SC, slabThick, obj.h*SC), slabMat);
               m2.position.set((obj.x+obj.w/2-CX)*SC, yBase + slabThick/2, (obj.y+obj.h/2-CZ)*SC);
+              m2.castShadow = true; m2.receiveShadow = true;
               threeScene.add(m2); building3D.push(m2);
             } else {
               const m2 = buildSlabWithHoles(obj, slabCutters, slabThick, slabMat);
@@ -5244,8 +5894,14 @@ function rebuild3D() {
           [[-pw*0.4,pd*0.4],[pw*0.4,pd*0.4],
            [-pw*0.4,-pd*0.4],[pw*0.4,-pd*0.4]].forEach(([ox,oz])=>pCyl(0.022,lh,dark,ox,0,oz));
         } else if (k === 'stool') {
-          pCyl(pw/2*0.85,0.04,pCol,0,0.46,0);
-          pCyl(0.025,0.46,dark,0,0,0);
+          appendAaltoStoolMeshes(Math.min(pw, pd) / 2, pCol, (mesh, lx, ly, lz, legAng) => {
+            const off = rotOffset(lx, lz);
+            mesh.position.set(pcx + off.ox, ly, pcz + off.oz);
+            mesh.rotation.y = -pRotRad - legAng;
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            grpGroup.add(mesh);
+          });
         } else if (k === 'desk' || k === 'counter') {
           pBox(pw,0.04,pd,pCol,0,0.74,0);
           [[-pw/2+0.04,pd/2-0.04],[pw/2-0.04,pd/2-0.04],[-pw/2+0.04,-pd/2+0.04],[pw/2-0.04,-pd/2+0.04]].forEach(([ox,oz])=>pCyl(0.025,0.74,dark,ox,0,oz));
@@ -5253,8 +5909,14 @@ function rebuild3D() {
           pBox(pw*0.9,0.04,pd*0.9,pCol,0,0.74,0);
           [[-pw/2+0.07,pd/2-0.07],[pw/2-0.07,pd/2-0.07],[-pw/2+0.07,-pd/2+0.07],[pw/2-0.07,-pd/2+0.07]].forEach(([ox,oz])=>pCyl(0.03,0.74,dark,ox,0,oz));
         } else if (k === 'tableRnd') {
-          pCyl(pw/2*0.85,0.04,pCol,0,0.74,0);
-          pCyl(0.04,0.74,dark,0,0,0);
+          appendAaltoRoundTableMeshes(Math.min(pw, pd) / 2, pCol, (mesh, lx, ly, lz, legAng) => {
+            const off = rotOffset(lx, lz);
+            mesh.position.set(pcx + off.ox, ly, pcz + off.oz);
+            mesh.rotation.y = -pRotRad - legAng;
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            grpGroup.add(mesh);
+          });
         } else if (k === 'sofa2' || k === 'sofa3') {
           pBox(pw,0.06,pd*0.65,pCol,0,0.42,pd*0.07);
           pBox(pw,0.55,0.1,pCol,0,0.42,-pd*0.32);
@@ -5326,8 +5988,13 @@ function rebuild3D() {
          [-fw*0.4,-fd*0.4],[fw*0.4,-fd*0.4]].forEach(([ox,oz])=>
           fCyl(0.022,lh,darkCol,ox,0,oz));
       } else if (k === 'stool') {
-        fCyl(fw/2*0.85, 0.04, fCol, 0, 0.46, 0);
-        fCyl(0.025, 0.46, darkCol, 0, 0, 0);
+        appendAaltoStoolMeshes(Math.min(fw, fd) / 2, fCol, (mesh, lx, ly, lz, legAng) => {
+          mesh.position.set(lx, ly, lz);
+          mesh.rotation.y = legAng;
+          mesh.castShadow = true;
+          mesh.receiveShadow = true;
+          furnGroup.add(mesh);
+        });
       } else if (k === 'armchair') {
         fBox(fw, 0.06, fd*0.6, fCol, 0, 0.42, fd*0.05); // seat
         fBox(fw, 0.5, 0.08, fCol, 0, 0.42, -fd*0.3+0.04); // back
@@ -5348,8 +6015,13 @@ function rebuild3D() {
          [-fw/2+0.07,-fd/2+0.07],[fw/2-0.07,-fd/2+0.07]].forEach(([ox,oz])=>
           fCyl(0.03,0.74,darkCol,ox,0,oz));
       } else if (k === 'tableRnd') {
-        fCyl(fw/2*0.85, 0.04, fCol, 0, 0.74, 0);
-        fCyl(0.04, 0.74, darkCol, 0, 0, 0);
+        appendAaltoRoundTableMeshes(Math.min(fw, fd) / 2, fCol, (mesh, lx, ly, lz, legAng) => {
+          mesh.position.set(lx, ly, lz);
+          mesh.rotation.y = legAng;
+          mesh.castShadow = true;
+          mesh.receiveShadow = true;
+          furnGroup.add(mesh);
+        });
       } else if (k === 'bedSgl' || k === 'bedDbl' || k === 'bedKng') {
         fBox(fw, 0.22, fd*0.82, fCol, 0, 0, fd*0.08); // mattress
         fBox(fw, 0.38, fd*0.12, darkCol, 0, 0, -fd*0.45); // headboard
@@ -5598,7 +6270,7 @@ function rebuild3D() {
       const mat = new THREE.MeshStandardMaterial({ color: fCol, roughness: 0.85 });
       const slab = new THREE.Mesh(new THREE.BoxGeometry(fw, 0.3, fd), mat);
       slab.position.set(fcx, elevOffset + 0.15, fcz);
-      slab.receiveShadow = true;
+      slab.castShadow = true; slab.receiveShadow = true;
       threeScene.add(slab); building3D.push(slab);
       return;
     }
@@ -5682,8 +6354,15 @@ function rebuild3D() {
            [-pw*0.4,-ph2*0.4],[pw*0.4,-ph2*0.4]].forEach(([lx,lz])=>
             rcyl(0.022,lh,darkCol2,lx,0,lz));
         } else if (pk === 'tableRnd') {
-          rcyl(pw/2*0.85, 0.04, pCol, 0, 0.74, 0);
-          rcyl(0.04, 0.74, darkCol2, 0, 0, 0);
+          appendAaltoRoundTableMeshes(Math.min(pw, ph2) / 2, pCol, (mesh, lx, ly, lz, legAng) => {
+            const p = rot(lx, lz);
+            mesh.position.set(p.x, ly, p.z);
+            mesh.rotation.y = -pRotRad - legAng;
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            addUpperMesh(mesh);
+            furnGroup.add(mesh);
+          });
         } else if (pk === 'desk' || pk === 'table' || pk === 'table4' || pk === 'table6') {
           rbox(pw, 0.04, ph2, pCol, 0, 0.74, 0);
           [[-pw/2+0.05,ph2/2-0.05],[pw/2-0.05,ph2/2-0.05],
@@ -5693,8 +6372,15 @@ function rebuild3D() {
           rbox(pw, 0.06, ph2*0.65, pCol, 0, 0.42, ph2*0.07);
           rbox(pw, 0.55, 0.1, pCol, 0, 0.42, -ph2*0.32);
         } else if (pk === 'stool') {
-          rcyl(pw/2*0.85, 0.04, pCol, 0, 0.46, 0);
-          rcyl(0.025, 0.46, darkCol2, 0, 0, 0);
+          appendAaltoStoolMeshes(Math.min(pw, ph2) / 2, pCol, (mesh, lx, ly, lz, legAng) => {
+            const p = rot(lx, lz);
+            mesh.position.set(p.x, ly, p.z);
+            mesh.rotation.y = -pRotRad - legAng;
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            addUpperMesh(mesh);
+            furnGroup.add(mesh);
+          });
         } else {
           rbox(pw, 0.75, ph2, pCol, 0, 0, 0);
         }
@@ -5714,8 +6400,14 @@ function rebuild3D() {
          [-fw/2+0.05,-fd/2+0.05],[fw/2-0.05,-fd/2+0.05]
         ].forEach(([ox,oz]) => cyl2(0.025, 0.74, darkCol2, ox, 0, oz));
       } else if (k === 'tableRnd') {
-        cyl2(fw/2*0.85, 0.04, fCol, 0, 0.74, 0);
-        cyl2(0.04, 0.74, darkCol2, 0, 0, 0);
+        appendAaltoRoundTableMeshes(Math.min(fw, fd) / 2, fCol, (mesh, lx, ly, lz, legAng) => {
+          mesh.position.set(lx, ly, lz);
+          mesh.rotation.y = legAng;
+          mesh.castShadow = true;
+          mesh.receiveShadow = true;
+          addUpperMesh(mesh);
+          furnGroup.add(mesh);
+        });
       } else if (k === 'sofa2' || k === 'sofa3' || k === 'armchair') {
         box2(fw, 0.06, fd*0.65, fCol, 0, 0.42, fd*0.07);
         box2(fw, 0.55, 0.1, fCol, 0, 0.42, -fd*0.32);
@@ -5723,8 +6415,14 @@ function rebuild3D() {
         box2(fw, 0.22, fd*0.82, fCol, 0, 0, fd*0.08);
         box2(fw, 0.38, fd*0.12, darkCol2, 0, 0, -fd*0.45);
       } else if (k === 'stool') {
-        cyl2(fw/2*0.85, 0.04, fCol, 0, 0.46, 0);
-        cyl2(0.025, 0.46, darkCol2, 0, 0, 0);
+        appendAaltoStoolMeshes(Math.min(fw, fd) / 2, fCol, (mesh, lx, ly, lz, legAng) => {
+          mesh.position.set(lx, ly, lz);
+          mesh.rotation.y = legAng;
+          mesh.castShadow = true;
+          mesh.receiveShadow = true;
+          addUpperMesh(mesh);
+          furnGroup.add(mesh);
+        });
       } else if (k === 'treeRnd' || k === 'treeL' || k === 'plantS') {
         cyl2(0.03, 1.2, new THREE.Color(0x8b6914), 0, 0, 0);
         cyl2(Math.min(fw,fd)/2*0.85, Math.min(fw,fd)*0.7, new THREE.Color(0x5a9e36), 0, 1.2, 0);
@@ -5735,6 +6433,7 @@ function rebuild3D() {
   });
 
   // ── MODULE 3D — extrude connected module shapes onto building facades ──
+  buildAllLandscape3D(SC, CX, CZ);
   buildAllSeparators3D(SC, CX, CZ, planBaseElevation);
   buildModules3D(SC, CX, CZ);
 
@@ -6431,6 +7130,7 @@ function setCameraFromOrbit() {
     orbitTarget.z + orbitDist * sinPhi * Math.cos(orbitTheta)
   );
   threeCamera.lookAt(orbitTarget);
+  updateInfiniteGround();
 }
 
 // ── WASD navigation for the 3D viewport ──
@@ -6476,7 +7176,6 @@ vpEl2.addEventListener('mousedown', e => {
   vpShiftPan = e.shiftKey;
   vpLastX = e.clientX;
   vpLastY = e.clientY;
-  if (!vpShiftPan) setOrbitPivotFromPointer(e.clientX, e.clientY);
   vpEl2.style.cursor = vpShiftPan ? 'move' : 'grabbing';
   e.preventDefault();
 });
@@ -6558,11 +7257,13 @@ function isShiftAdd(e) {
 
 function hitTestSelect(sx, sy, shiftAdd) {
   let hits = hitTestAll(sx, sy);
+  const primary = hits.filter(o => o.type !== 'landscape');
+  if (primary.length) hits = primary;
   if (!shiftAdd || hits.length > 0) return hits;
   const yOff = planOriginY(state.currentPlan);
   for (let i = objects().length - 1; i >= 0; i--) {
     const o = objects()[i];
-    if (o.type === 'line' || o.type === 'curve') continue;
+    if (o.type === 'line' || o.type === 'curve' || o.type === 'landscape') continue;
     if (pointInObjectBounds(sx, sy, o, yOff)) return [o];
   }
   return hits;
@@ -6616,7 +7317,7 @@ function hideFurnMarqueeEl() {
 }
 
 function objectScreenBounds(obj, yOff) {
-  if (obj.type === 'separator') return separatorScreenBounds(obj, yOff);
+  if (obj.type === 'separator' || obj.type === 'landscape') return landscapeScreenBounds(obj, yOff);
   if (obj.type === 'circle') {
     const c = wts(obj.cx != null ? obj.cx : (obj.x + obj.r), obj.cy != null ? obj.cy : (obj.y + obj.r), yOff);
     const sr = (obj.r || 10) * state.zoom;
@@ -6648,7 +7349,7 @@ function objectContainedInMarquee(obj, mx0, my0, mx1, my1, yOff) {
 }
 
 function storeMultiDragOrigin(o) {
-  if (o.type === 'separator' && o.pts?.length) {
+  if ((o.type === 'separator' || o.type === 'landscape') && o.pts?.length) {
     return { pts: o.pts.map(p => ({ x: p.x, y: p.y })) };
   }
   if (o.type === 'circle') {
@@ -6658,7 +7359,7 @@ function storeMultiDragOrigin(o) {
 }
 
 function applyMultiDragDelta(o, orig, dx, dy) {
-  if (o.type === 'separator' && orig.pts) {
+  if ((o.type === 'separator' || o.type === 'landscape') && orig.pts) {
     o.pts = orig.pts.map(p => ({ x: snapPlan(p.x + dx), y: snapPlan(p.y + dy) }));
   } else if (o.type === 'circle') {
     o.cx = snapToGrid(orig.cx + dx);
@@ -6976,7 +7677,7 @@ planCanvas.addEventListener('mousedown', e => {
   if (state.tool === 'select') {
     const yOff = planOriginY(state.currentPlan);
     const shiftAdd = isShiftAdd(e);
-    const selSep = objects().find(o => o.id === state.selected && o.type === 'separator');
+    const selSep = objects().find(o => o.id === state.selected && (o.type === 'separator' || o.type === 'landscape'));
     if (selSep && !shiftAdd) {
       const ptIdx = hitSeparatorPoint(selSep, sx, sy, yOff, 14);
       if (ptIdx >= 0) {
@@ -7040,7 +7741,7 @@ planCanvas.addEventListener('mousedown', e => {
 
       state.selected = nextHit.id;
       clearMultiSelection();
-      if (nextHit.type === 'separator') {
+      if (nextHit.type === 'separator' || nextHit.type === 'landscape') {
         const yOff = planOriginY(state.currentPlan);
         const ptIdx = hitSeparatorPoint(nextHit, sx, sy, yOff, 14);
         if (ptIdx >= 0) {
@@ -7061,7 +7762,7 @@ planCanvas.addEventListener('mousedown', e => {
       state.dragging = true;
       state.dragStartX = sx; state.dragStartY = sy;
       state.sepPtDrag = null;
-      if (nextHit.type === 'separator' && nextHit.pts?.length) {
+      if (nextHit.type === 'separator' || nextHit.type === 'landscape') {
         state.dragSepPts = nextHit.pts.map(p => ({ x: p.x, y: p.y }));
       } else {
         state.dragSepPts = null;
@@ -7108,6 +7809,7 @@ planCanvas.addEventListener('mousedown', e => {
   // Pencil handled in ADDITIONS section (click-to-place chain)
   if (state.tool === 'pencil') return;
   if (state.tool === 'separator') return;
+  if (state.tool === 'grass') return;
 
   // 3D tools snap to structural grid; 2D drawing tools use 0.5m fine snap
   const is2D = ['rect2d','circle','polygon','line','curve','tri','text'].includes(state.tool);
@@ -7130,6 +7832,7 @@ planCanvas.addEventListener('mousedown', e => {
 
 planCanvas.addEventListener('dblclick', e => {
   const { sx, sy } = getCanvasPos(e);
+  if (grassDraw) { finishGrassDraw(); return; }
   if (sepDraw) { finishSepDraw(); return; }
   const hit = hitTest(sx, sy);
   if (!hit) return;
@@ -7203,6 +7906,7 @@ window.addEventListener('keydown', e => {
   if (e.code === 'KeyV') setTool('select');
   if (e.code === 'KeyM') setTool('marquee');
   if (e.code === 'KeyF') openFurniturePicker();
+  if (e.code === 'KeyU') setTool('grass');
   if (e.code === 'KeyP') openSeparatorPicker();
   if (e.code === 'KeyR') setTool('rect');
   if (e.code === 'KeyH') setTool('void');
@@ -7279,11 +7983,13 @@ function finishDraw(sx, sy) {
     if (tooSmall) { draw2D(); return; }
     obj = { id: nextId(), type: 'slab', x: wx, y: wy, w: ww, h: wh, color: '#d8d4cc', floors: 1 };
   } else if (state.tool === 'grid') {
-    if (tooSmall) { draw2D(); return; }
-    obj = { id: nextId(), type: 'grid', x: wx, y: wy, w: ww, h: wh, cols: 3, rows: 3, floors: 4, floorH: 3.2, label: 'Grid' };
+    const layout = gridLayoutFromDragWorld(s, c);
+    if (layout.w < 4 || layout.h < 4) { draw2D(); return; }
+    obj = { id: nextId(), type: 'grid', ...layout, floors: 4, floorH: 3.2, label: 'Grid' };
   } else if (state.tool === 'fgrid') {
-    if (tooSmall) { draw2D(); return; }
-    obj = { id: nextId(), type: 'fgrid', x: wx, y: wy, w: ww, h: wh, cols: 3, rows: 3, floors: 4, floorH: 3.2, label: 'Grid', edgePoly: null };
+    const layout = gridLayoutFromDragWorld(s, c);
+    if (layout.w < 4 || layout.h < 4) { draw2D(); return; }
+    obj = { id: nextId(), type: 'fgrid', ...layout, floors: 4, floorH: 3.2, label: 'Grid', edgePoly: null };
   } else if (state.tool === 'circle') {
     // drawStart = center, drag distance = radius
     const r = Math.hypot(c.wx - s.wx, c.wy - s.wy);
@@ -7412,8 +8118,16 @@ function syncRoofUiSummary(obj) {
   if (gableWrap) gableWrap.style.display = rType === 'pitched' ? '' : 'none';
   const joistsLbl = gel('lbl-roof-joists');
   const joistsChk = gel('chk-roof-joists');
+  const joistsXLbl = gel('lbl-roof-joists-x');
+  const joistsX = gel('chk-roof-joists-x');
+  const joistsYLbl = gel('lbl-roof-joists-y');
+  const joistsY = gel('chk-roof-joists-y');
   if (joistsLbl) joistsLbl.style.display = obj?.hasRoof ? 'flex' : 'none';
+  if (joistsXLbl) joistsXLbl.style.display = obj?.hasRoof ? 'flex' : 'none';
+  if (joistsYLbl) joistsYLbl.style.display = obj?.hasRoof ? 'flex' : 'none';
   if (joistsChk) joistsChk.checked = !!obj?.roofJoists;
+  if (joistsX) joistsX.checked = obj?.roofJoists ? obj.roofJoistsDirX !== false : false;
+  if (joistsY) joistsY.checked = obj?.roofJoists ? obj.roofJoistsDirY !== false : false;
   const rDot = gel('ctx-roof-color-dot');
   if (rDot && obj) rDot.style.background = gridRoofColor(obj);
   const gDot = gel('ctx-gable-color-dot');
@@ -7949,6 +8663,7 @@ function renderVegGrid() {
 function setTool(t) {
   state.tool = t;
   document.getElementById('separator-picker')?.classList.remove('show');
+  document.getElementById('furniture-picker')?.classList.remove('show');
   // Cancel pending furniture when switching to any non-placement tool
   if (t !== 'furniture' && state.pendingFurniture) {
     state.pendingFurniture = null;
@@ -7963,7 +8678,8 @@ function setTool(t) {
 function updateCursor() {
   if (spaceDown) { planCanvas.style.cursor = 'grab'; return; }
   const cursors = { select: 'default', marquee: 'crosshair', rect: 'crosshair', grid: 'crosshair',
-    line: 'crosshair', circle: 'crosshair', pen: 'crosshair', text: 'text', stamp: 'copy', separator: 'crosshair' };
+    line: 'crosshair', circle: 'crosshair', pen: 'crosshair', text: 'text', stamp: 'copy',
+    separator: 'crosshair', grass: 'crosshair' };
   planCanvas.style.cursor = cursors[state.tool] || 'crosshair';
 }
 
@@ -8617,17 +9333,21 @@ function recallView(idx) {
   orbitPhi = v.phi;
   orbitDist = v.dist;
   orbitTarget.set(v.target.x, v.target.y, v.target.z);
+  state.activeSavedViewIdx = idx;
   // Clear preset highlights
   ['top','front','right','persp','ortho'].forEach(p => {
     const b = document.getElementById('vbtn-' + p);
     if (b) b.classList.remove('active');
   });
   setCameraFromOrbit();
+  renderSavedViews();
   requestRender();
 }
 
 function deleteView(idx) {
   state.savedViews.splice(idx, 1);
+  if (state.activeSavedViewIdx === idx) state.activeSavedViewIdx = null;
+  else if (state.activeSavedViewIdx != null && state.activeSavedViewIdx > idx) state.activeSavedViewIdx--;
   renderSavedViews();
   scheduleAutosave();
 }
@@ -8657,7 +9377,7 @@ function renderSavedViews() {
     row.style.cssText = 'display:flex;align-items:center;gap:2px;';
 
     const btn = document.createElement('button');
-    btn.className = 'vpbtn';
+    btn.className = 'vpbtn sv-view-btn' + (state.activeSavedViewIdx === i ? ' active' : '');
     btn.textContent = v.name;
     btn.title = 'Recall: ' + v.name;
     btn.style.cssText = 'font-size:9px;padding:2px 5px;flex:1;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:62px;';
@@ -8682,6 +9402,19 @@ function renderSavedViews() {
     row.appendChild(del);
     list.appendChild(row);
   });
+  list.classList.toggle('sv-scroll', (state.savedViews || []).length > 8);
+}
+
+function initSavedViewsPanel() {
+  const panel = document.getElementById('saved-views-panel');
+  if (!panel || panel._wheelBound) return;
+  panel._wheelBound = true;
+  // Stop 3D orbit zoom from stealing wheel events when the list can scroll
+  panel.addEventListener('wheel', e => {
+    const list = document.getElementById('saved-views-list');
+    if (!list || list.scrollHeight <= list.clientHeight) return;
+    e.stopPropagation();
+  }, { passive: true, capture: true });
 }
 
 function triggerRender() {
@@ -9446,35 +10179,37 @@ const FURNITURE = {
   // ── GROUPS — placed as multiple objects at once ──
   // Each piece has dx,dy offsets in metres from group centre, plus w,h,kind,rotation(deg)
   groups: [
-    { kind:'grpWorkstation', label:'Workstation', w:1.6, h:1.35,
+    { kind:'grpWorkstation', label:'Workstation', w:1.6, h:2.7,
       pieces:[
-        { kind:'desk',  w:1.6, h:0.8,  dx:0,     dy:-0.275 },
-        { kind:'chair', w:0.55,h:0.55, dx:0,     dy: 0.45 },
+        { kind:'desk',  w:1.6, h:0.8,  dx:0, dy:-0.4 },
+        { kind:'desk',  w:1.6, h:0.8,  dx:0, dy: 0.4 },
+        { kind:'chair', w:0.55,h:0.55, dx:0, dy:-1.075, rot:180 },
+        { kind:'chair', w:0.55,h:0.55, dx:0, dy: 1.075 },
       ]},
     { kind:'grpRound4', label:'Round ×4', w:2.4, h:2.4,
       pieces:[
         { kind:'tableRnd', w:1.0, h:1.0, dx:0, dy:0 },
-        { kind:'stool', w:0.42,h:0.42, dx: 0,    dy:-0.85 },
-        { kind:'stool', w:0.42,h:0.42, dx: 0.85, dy: 0    },
-        { kind:'stool', w:0.42,h:0.42, dx: 0,    dy: 0.85 },
-        { kind:'stool', w:0.42,h:0.42, dx:-0.85, dy: 0    },
+        { kind:'stool', w:0.33,h:0.33, dx: 0,    dy:-0.85 },
+        { kind:'stool', w:0.33,h:0.33, dx: 0.85, dy: 0    },
+        { kind:'stool', w:0.33,h:0.33, dx: 0,    dy: 0.85 },
+        { kind:'stool', w:0.33,h:0.33, dx:-0.85, dy: 0    },
       ]},
     { kind:'grpRound6', label:'Round ×6', w:2.8, h:2.8,
       pieces:[
         { kind:'tableRnd', w:1.2, h:1.2, dx:0, dy:0 },
-        { kind:'stool', w:0.42,h:0.42, dx: 0,    dy:-1.0  },
-        { kind:'stool', w:0.42,h:0.42, dx: 0.87, dy:-0.5  },
-        { kind:'stool', w:0.42,h:0.42, dx: 0.87, dy: 0.5  },
-        { kind:'stool', w:0.42,h:0.42, dx: 0,    dy: 1.0  },
-        { kind:'stool', w:0.42,h:0.42, dx:-0.87, dy: 0.5  },
-        { kind:'stool', w:0.42,h:0.42, dx:-0.87, dy:-0.5  },
+        { kind:'stool', w:0.33,h:0.33, dx: 0,    dy:-1.0  },
+        { kind:'stool', w:0.33,h:0.33, dx: 0.87, dy:-0.5  },
+        { kind:'stool', w:0.33,h:0.33, dx: 0.87, dy: 0.5  },
+        { kind:'stool', w:0.33,h:0.33, dx: 0,    dy: 1.0  },
+        { kind:'stool', w:0.33,h:0.33, dx:-0.87, dy: 0.5  },
+        { kind:'stool', w:0.33,h:0.33, dx:-0.87, dy:-0.5  },
       ]},
-    { kind:'grpLounge', label:'Lounge', w:3.6, h:2.8,
+    { kind:'grpLounge', label:'Lounge', w:3.15, h:3.3,
       pieces:[
-        { kind:'sofa3',    w:2.4, h:0.85, dx: 0,    dy:-0.875 },
-        { kind:'sofa2',    w:1.8, h:0.85, dx:-0.9,  dy: 0.575, rot:90 },
-        { kind:'tableRnd', w:0.7, h:0.7,  dx: 0.6,  dy: 0.35  },
-        { kind:'armchair', w:0.8, h:0.8,  dx: 1.2,  dy: 0.5   },
+        { kind:'sofa3',    w:2.4, h:0.85, dx:-0.28, dy:-1.15  },
+        { kind:'sofa2',    w:1.8, h:0.85, dx:-1.06, dy: 0.67,  rot:90 },
+        { kind:'tableRnd', w:0.7, h:0.7,  dx: 0.14, dy: 0.42  },
+        { kind:'armchair', w:0.8, h:0.8,  dx: 1.0,  dy: 0.63,  rot:284 },
       ]},
     { kind:'grpCanteen', label:'Canteen', w:2.0, h:3.6,
       pieces:[
@@ -9503,7 +10238,7 @@ const FURNITURE = {
     { kind:'sofa2',    label:'Sofa 2',   w:1.8,  h:0.85 },
     { kind:'sofa3',    label:'Sofa 3',   w:2.4,  h:0.85 },
     { kind:'armchair', label:'Armchair', w:0.8,  h:0.8  },
-    { kind:'stool',    label:'Stool',    w:0.42, h:0.42 },
+    { kind:'stool',    label:'Stool',    w:0.33, h:0.33 },
   ],
   tables: [
     { kind:'desk',     label:'Desk',     w:1.6,  h:0.8  },
@@ -9546,9 +10281,10 @@ function objectDisplayName(obj) {
     mass:'Mass', grid:'Grid', fgrid:'Freeform Grid', stair:'Stair', slab:'Slab',
     wall:'Wall', circle:'Circle', tri:'Triangle', line:'Line',
     curve:'Arc', label:'Text', furniture:'Furniture', furnitureGroup:'Workstation', void:'Void',
-    separator:'Room separator',
+    separator:'Room separator', landscape:'Grass patch',
   };
   if (obj.type === 'separator') return separatorKindMeta(obj.kind).label;
+  if (obj.type === 'landscape') return obj.kind === 'grass' ? 'Grass patch' : 'Landscape';
   return TYPE_NAMES[obj.type] || obj.type;
 }
 
@@ -9565,6 +10301,124 @@ function setFurnCat(cat) {
 
 // ── FURNITURE TOP-VIEW DRAWING (shared by picker icons + 2D canvas) ──
 // ctx: canvas 2d context, kind: furniture type, x/y: top-left, w/h: pixel size
+// Alvar Aalto Stool 60 — drawing dims (m): seat Ø0.33, H0.44, base span Ø0.38.
+const AALTO_STOOL_SEAT_R = 0.165;
+const AALTO_STOOL_SEAT_H = 0.023;
+const AALTO_STOOL_TOTAL_H = 0.44;
+const AALTO_STOOL_BASE_R = 0.19;
+const AALTO_STOOL_ATTACH_R = 0.119;
+const AALTO_STOOL_LEG_W = 0.038;
+const AALTO_STOOL_LEG_D = 0.022;
+
+function appendAaltoStoolMeshes(seatRadiusM, woodCol, placeFn) {
+  const s = seatRadiusM / AALTO_STOOL_SEAT_R;
+  const seatR = AALTO_STOOL_SEAT_R * s;
+  const seatH = AALTO_STOOL_SEAT_H * s;
+  const totalH = AALTO_STOOL_TOTAL_H * s;
+  const baseR = AALTO_STOOL_BASE_R * s;
+  const attachR = AALTO_STOOL_ATTACH_R * s;
+  const legW = AALTO_STOOL_LEG_W * s;
+  const legD = AALTO_STOOL_LEG_D * s;
+  const seatBottom = totalH - seatH;
+  const legV = seatBottom;
+  const mat = new THREE.MeshStandardMaterial({ color: woodCol, roughness: 0.74 });
+  const seat = new THREE.Mesh(new THREE.CylinderGeometry(seatR, seatR, seatH, 32), mat);
+  placeFn(seat, 0, totalH - seatH / 2, 0, 0);
+  for (let i = 0; i < 3; i++) {
+    const ang = (i * 120 - 90) * Math.PI / 180;
+    const cosA = Math.cos(ang), sinA = Math.sin(ang);
+    const topX = cosA * attachR, topZ = sinA * attachR;
+    const botX = cosA * baseR, botZ = sinA * baseR;
+    const midX = (topX + botX) * 0.5, midZ = (topZ + botZ) * 0.5;
+    const vLeg = new THREE.Mesh(new THREE.BoxGeometry(legW, legV, legD), mat);
+    placeFn(vLeg, midX, legV / 2, midZ, ang);
+  }
+}
+
+const AALTO_PLAN_OUTLINE_W = 1;
+const AALTO_PLAN_LEG_STROKE_W = 0.75;
+
+function drawAaltoStoolTopView(ctx, cx, cy, r, woodCol, stroke) {
+  const attachFrac = AALTO_STOOL_ATTACH_R / AALTO_STOOL_SEAT_R;
+  const baseFrac = AALTO_STOOL_BASE_R / AALTO_STOOL_SEAT_R;
+  ctx.strokeStyle = stroke;
+  ctx.lineWidth = AALTO_PLAN_OUTLINE_W;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.stroke();
+  const legW = Math.max(1.5, r * 0.14);
+  ctx.lineWidth = AALTO_PLAN_LEG_STROKE_W;
+  for (let i = 0; i < 3; i++) {
+    const ang = (i * 120 - 90) * Math.PI / 180;
+    const cosA = Math.cos(ang), sinA = Math.sin(ang);
+    const ax = cx + cosA * r * attachFrac, ay = cy + sinA * r * attachFrac;
+    const bx = cx + cosA * r * baseFrac, by = cy + sinA * r * baseFrac;
+    const px = -sinA * legW * 0.5, py = cosA * legW * 0.5;
+    ctx.beginPath();
+    ctx.moveTo(ax + px, ay + py);
+    ctx.lineTo(bx + px, by + py);
+    ctx.lineTo(bx - px, by - py);
+    ctx.lineTo(ax - px, ay - py);
+    ctx.closePath();
+    ctx.stroke();
+  }
+}
+
+// Alvar Aalto round table — drawing dims scaled from Ø1.0 m catalog top, H0.74 m.
+const AALTO_TABLE_TOP_R = 0.5;
+const AALTO_TABLE_TOP_H = 0.04;
+const AALTO_TABLE_TOTAL_H = 0.74;
+const AALTO_TABLE_ATTACH_R = 0.36;
+const AALTO_TABLE_BASE_R = 0.576;
+const AALTO_TABLE_LEG_W = 0.042;
+const AALTO_TABLE_LEG_D = 0.024;
+
+function appendAaltoRoundTableMeshes(topRadiusM, woodCol, placeFn) {
+  const s = topRadiusM / AALTO_TABLE_TOP_R;
+  const topR = AALTO_TABLE_TOP_R * s;
+  const topH = AALTO_TABLE_TOP_H * s;
+  const totalH = AALTO_TABLE_TOTAL_H * s;
+  const baseR = AALTO_TABLE_BASE_R * s;
+  const attachR = AALTO_TABLE_ATTACH_R * s;
+  const legW = AALTO_TABLE_LEG_W * s;
+  const legD = AALTO_TABLE_LEG_D * s;
+  const topBottom = totalH - topH;
+  const legV = topBottom;
+  const mat = new THREE.MeshStandardMaterial({ color: woodCol, roughness: 0.74 });
+  const top = new THREE.Mesh(new THREE.CylinderGeometry(topR, topR, topH, 32), mat);
+  placeFn(top, 0, totalH - topH / 2, 0, 0);
+  for (let i = 0; i < 4; i++) {
+    const ang = (i * 90 - 45) * Math.PI / 180;
+    const cosA = Math.cos(ang), sinA = Math.sin(ang);
+    const topX = cosA * attachR, topZ = sinA * attachR;
+    const botX = cosA * baseR, botZ = sinA * baseR;
+    const midX = (topX + botX) * 0.5, midZ = (topZ + botZ) * 0.5;
+    const vLeg = new THREE.Mesh(new THREE.BoxGeometry(legW, legV, legD), mat);
+    placeFn(vLeg, midX, legV / 2, midZ, ang);
+  }
+}
+
+function drawAaltoRoundTableTopView(ctx, cx, cy, r, woodCol, stroke) {
+  const legDist = (AALTO_TABLE_ATTACH_R / AALTO_TABLE_TOP_R) * r;
+  ctx.strokeStyle = stroke;
+  ctx.lineWidth = AALTO_PLAN_OUTLINE_W;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.stroke();
+  const legSz = Math.max(2, r * 0.06);
+  ctx.lineWidth = AALTO_PLAN_LEG_STROKE_W;
+  for (let i = 0; i < 4; i++) {
+    const ang = (i * 90 - 45) * Math.PI / 180;
+    const lx = cx + Math.cos(ang) * legDist;
+    const ly = cy + Math.sin(ang) * legDist;
+    ctx.save();
+    ctx.translate(lx, ly);
+    ctx.rotate(ang);
+    ctx.strokeRect(-legSz / 2, -legSz / 2, legSz, legSz * 0.72);
+    ctx.restore();
+  }
+}
+
 function drawFurnTopView(ctx, kind, x, y, w, h, color) {
   const c = color || '#e8e5dc';
   const stroke = 'rgba(0,0,0,0.35)';
@@ -9587,11 +10441,7 @@ function drawFurnTopView(ctx, kind, x, y, w, h, color) {
       break;
     }
     case 'stool': {
-      ctx.fillStyle = c; ctx.strokeStyle = stroke; ctx.lineWidth = Math.max(0.8, w*0.05);
-      ctx.beginPath(); ctx.arc(w/2, h/2, Math.min(w,h)/2*0.85, 0, Math.PI*2);
-      ctx.fill(); ctx.stroke();
-      ctx.beginPath(); ctx.arc(w/2, h/2, Math.min(w,h)/2*0.4, 0, Math.PI*2);
-      ctx.strokeStyle='rgba(0,0,0,0.15)'; ctx.stroke();
+      drawAaltoStoolTopView(ctx, w / 2, h / 2, Math.min(w, h) / 2, c, stroke);
       break;
     }
     case 'armchair': {
@@ -9644,13 +10494,7 @@ function drawFurnTopView(ctx, kind, x, y, w, h, color) {
       break;
     }
     case 'tableRnd': {
-      ctx.fillStyle = c; ctx.strokeStyle = stroke; ctx.lineWidth = Math.max(0.8, w*0.04);
-      ctx.beginPath(); ctx.arc(w/2, h/2, Math.min(w,h)/2*0.85, 0, Math.PI*2);
-      ctx.fill(); ctx.stroke();
-      // Centre cross
-      ctx.strokeStyle='rgba(0,0,0,0.12)'; ctx.lineWidth=0.7;
-      ctx.beginPath(); ctx.moveTo(w/2, h*0.2); ctx.lineTo(w/2, h*0.8); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(w*0.2, h/2); ctx.lineTo(w*0.8, h/2); ctx.stroke();
+      drawAaltoRoundTableTopView(ctx, w / 2, h / 2, Math.min(w, h) / 2, c, stroke);
       break;
     }
     case 'bedSgl': case 'bedDbl': case 'bedKng': {
@@ -9918,25 +10762,80 @@ function renderFurnGrid() {
 
 // Draw composite top-view icon for a furniture group
 function drawGroupTopView(ctx, item, sz) {
-  // Find bounding box of all pieces
+  // Bounding box of all pieces (respects piece rotation)
   let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
   item.pieces.forEach(p => {
-    minX = Math.min(minX, p.dx - p.w/2); maxX = Math.max(maxX, p.dx + p.w/2);
-    minY = Math.min(minY, p.dy - p.h/2); maxY = Math.max(maxY, p.dy + p.h/2);
+    const hw = p.w / 2, hh = p.h / 2;
+    const rot = (p.rot || 0) * Math.PI / 180;
+    const cos = Math.abs(Math.cos(rot)), sin = Math.abs(Math.sin(rot));
+    const extX = hw * cos + hh * sin, extY = hw * sin + hh * cos;
+    minX = Math.min(minX, p.dx - extX); maxX = Math.max(maxX, p.dx + extX);
+    minY = Math.min(minY, p.dy - extY); maxY = Math.max(maxY, p.dy + extY);
   });
   const gw = maxX - minX, gh = maxY - minY;
   const scale = Math.min((sz * 0.88) / gw, (sz * 0.88) / gh);
   const offX = sz/2 - ((minX + maxX)/2) * scale;
   const offY = sz/2 - ((minY + maxY)/2) * scale;
   item.pieces.forEach(p => {
-    const px = offX + p.dx * scale - p.w * scale / 2;
-    const py = offY + p.dy * scale - p.h * scale / 2;
-    drawFurnTopView(ctx, p.kind, px, py, p.w * scale, p.h * scale, '#d8d4cc');
+    const pw = p.w * scale, ph = p.h * scale;
+    const px = offX + p.dx * scale - pw / 2;
+    const py = offY + p.dy * scale - ph / 2;
+    ctx.save();
+    if (p.rot) {
+      ctx.translate(px + pw/2, py + ph/2);
+      ctx.rotate(p.rot * Math.PI / 180);
+      ctx.translate(-pw/2, -ph/2);
+      drawFurnTopView(ctx, p.kind, 0, 0, pw, ph, '#d8d4cc');
+    } else {
+      drawFurnTopView(ctx, p.kind, px, py, pw, ph, '#d8d4cc');
+    }
+    ctx.restore();
   });
 }
 
+// Workstation cluster for marquee arrays: back-to-back desks, chairs on outer edges.
+// Spacing — 0.2 m between desk sides (columns), 1.6 m between chair aisles (rows).
+function workstationArrayMetrics() {
+  const unitW = 1.6, unitH = 2.7;
+  const colGap = 0.2, rowGap = 1.6;
+  return { unitW, unitH, colGap, rowGap, stepX: unitW + colGap, stepY: unitH + rowGap };
+}
+
+function furnitureArraySpacing(item) {
+  if (item.kind === 'grpWorkstation') {
+    const ws = workstationArrayMetrics();
+    return { itemW: ws.unitW, itemH: ws.unitH, gapX: ws.colGap, gapY: ws.rowGap, stepX: ws.stepX, stepY: ws.stepY };
+  }
+  const spacingByKind = {
+    grpRound4:  { gx: 0.8, gy: 0.8 },
+    grpRound6:  { gx: 0.8, gy: 0.8 },
+    grpLounge:  { gx: 1.0, gy: 1.0 },
+    grpCanteen: { gx: 1.0, gy: 1.0 },
+    desk:       { gx: 0.3, gy: 0.8 },
+    chair:      { gx: 0.2, gy: 0.2 },
+    treeNaked:  { gx: 3.0, gy: 3.0 },
+  };
+  const g = spacingByKind[item.kind] || { gx: 0.6, gy: 0.6 };
+  return { itemW: item.w, itemH: item.h, gapX: g.gx, gapY: g.gy, stepX: item.w + g.gx, stepY: item.h + g.gy };
+}
+
+function computeFurnitureArray(rectW, rectH, spacing, toPx) {
+  const itemW = toPx(spacing.itemW);
+  const itemH = toPx(spacing.itemH);
+  const stepX = toPx(spacing.stepX);
+  const stepY = toPx(spacing.stepY);
+  const gapX = toPx(spacing.gapX);
+  const gapY = toPx(spacing.gapY);
+  const nx = Math.max(1, Math.floor(rectW / stepX));
+  const ny = Math.max(1, Math.floor(rectH / stepY));
+  return {
+    nx, ny, itemW, itemH, stepX, stepY,
+    totalW: nx * stepX - gapX,
+    totalH: ny * stepY - gapY,
+  };
+}
+
 // Fill a rectangle (drag from screen pos s1 to s2) with an array of the active furniture item.
-// Spacing chosen based on the item's footprint + a per-kind comfort margin.
 function fillFurnitureArray(sx1, sy1, sx2, sy2) {
   const item = state.pendingFurniture;
   if (!item) return false;
@@ -9949,43 +10848,18 @@ function fillFurnitureArray(sx1, sy1, sx2, sy2) {
   const rectW = x2 - x1, rectH = y2 - y1;
   if (rectW < 0.5 || rectH < 0.5) return false;
 
-  // Item footprint in world-px
-  const itemW = mToWorld(item.w);
-  const itemH = mToWorld(item.h);
-
-  // Per-kind comfort spacing (in metres → world-px). Default: 0.6m clearance.
-  const spacingByKind = {
-    grpWorkstation: { gx: 0.5, gy: 0.8 }, // walkway between rows
-    grpRound4:      { gx: 0.8, gy: 0.8 },
-    grpRound6:      { gx: 0.8, gy: 0.8 },
-    grpLounge:      { gx: 1.0, gy: 1.0 },
-    grpCanteen:     { gx: 1.0, gy: 1.0 },
-    desk:           { gx: 0.3, gy: 0.8 },
-    chair:          { gx: 0.2, gy: 0.2 },
-    treeNaked:      { gx: 3.0, gy: 3.0 }, // tree spacing
-  };
-  const g = spacingByKind[item.kind] || { gx: 0.6, gy: 0.6 };
-  const stepX = itemW + mToWorld(g.gx);
-  const stepY = itemH + mToWorld(g.gy);
-
-  // Compute grid count fitting inside rect
-  const nx = Math.max(1, Math.floor(rectW / stepX));
-  const ny = Math.max(1, Math.floor(rectH / stepY));
-  if (nx * ny > 400) {
-    if (!confirm(`This will place ${nx * ny} items. Continue?`)) return false;
+  const spacing = furnitureArraySpacing(item);
+  const arr = computeFurnitureArray(rectW, rectH, spacing, mToWorld);
+  if (arr.nx * arr.ny > 400) {
+    if (!confirm(`This will place ${arr.nx * arr.ny} items. Continue?`)) return false;
   }
 
-  // Center the array within the rect
-  const totalW = nx * stepX - mToWorld(g.gx);
-  const totalH = ny * stepY - mToWorld(g.gy);
-  const offX = x1 + (rectW - totalW) / 2 + itemW / 2;
-  const offY = y1 + (rectH - totalH) / 2 + itemH / 2;
+  const offX = x1 + (rectW - arr.totalW) / 2 + arr.itemW / 2;
+  const offY = y1 + (rectH - arr.totalH) / 2 + arr.itemH / 2;
 
-  for (let j = 0; j < ny; j++) {
-    for (let i = 0; i < nx; i++) {
-      const cx = offX + i * stepX;
-      const cy = offY + j * stepY;
-      placeFurnitureAt(item, { x: cx, y: cy });
+  for (let j = 0; j < arr.ny; j++) {
+    for (let i = 0; i < arr.nx; i++) {
+      placeFurnitureAt(item, { x: offX + i * arr.stepX, y: offY + j * arr.stepY });
     }
   }
   draw2D();
@@ -10359,7 +11233,9 @@ window.addEventListener('mousemove', e => {
     const obj = objects().find(o => o.id === state.sepPtDrag.objId);
     if (obj?.pts?.[state.sepPtDrag.ptIdx]) {
       const baseY = planOriginY(state.currentPlan);
-      const snap = computeSeparatorSnap(sx, sy, null, baseY);
+      const snap = obj.type === 'landscape'
+        ? computeSeparatorSnap(sx, sy, null, baseY)
+        : computeSeparatorSnap(sx, sy, null, baseY);
       obj.pts[state.sepPtDrag.ptIdx].x = snap.wx;
       obj.pts[state.sepPtDrag.ptIdx].y = snap.wy;
       draw2D();
@@ -10400,7 +11276,7 @@ window.addEventListener('mousemove', e => {
     const dy = (sy - state.dragStartY) / state.zoom;
     const obj = objects().find(o => o.id === state.selected);
     if (obj) {
-      if (obj.type === 'separator' && state.dragSepPts) {
+      if ((obj.type === 'separator' || obj.type === 'landscape') && state.dragSepPts) {
         obj.pts = state.dragSepPts.map(p => ({ x: snapPlan(p.x + dx), y: snapPlan(p.y + dy) }));
       } else {
         obj.x = snapPlan(state.dragObjX + dx);
@@ -10526,6 +11402,7 @@ function projectSnapshot() {
     modules: JSON.parse(JSON.stringify(state.modules || [])),
     currentModule: state.currentModule,
     savedViews: JSON.parse(JSON.stringify(state.savedViews || [])),
+    activeSavedViewIdx: state.activeSavedViewIdx ?? null,
   };
 }
 
@@ -10576,6 +11453,7 @@ function resetProject() {
   state.mode = 'plan';
   state.selected = null;
   state.savedViews = [];
+  state.activeSavedViewIdx = null;
   multiSelected = [];
   multiDragPending = null;
   planClipboard = null;
@@ -10613,6 +11491,8 @@ function applyProjectData(data) {
   state.currentPlan = 0;
   state.selected = null;
   state.savedViews = data.savedViews || [];
+  state.activeSavedViewIdx = (data.activeSavedViewIdx != null && data.activeSavedViewIdx < state.savedViews.length)
+    ? data.activeSavedViewIdx : null;
   // Restore modules
   state.modules = data.modules ? JSON.parse(JSON.stringify(data.modules)) : [];
   state.currentModule = data.currentModule ?? null;
@@ -10675,10 +11555,299 @@ function initAll() {
   setTimeout(() => { zoomExtents(); renderSavedViews(); renderPlanDropdown(); }, 100);
 }
 // Default prompts
+const PHOTO_RENDER_STYLE = `PHOTOREALISTIC STYLE (target look — soft Nordic courtyard photography):
+- Lighting: soft overcast daylight, evenly diffused, gentle shadows only — NO blue sky, NO sun beams, NO lens flare, NO HDR bloom
+- Palette: muted and desaturated — pale tan/beige natural timber, cool light-grey fine gravel, sage/olive/pale meadow greens
+- Ground plane: light grey crushed stone / gravel texture; grass patches are WILD MEADOW planting inside the drawn polygons (varied blade height, clover, small white wildflowers, natural unkempt edges) — NOT flat green carpet or manicured lawn
+- Furniture: minimalist light-wood outdoor pieces (Aalto tables/stools) at exact positions — pale grey or natural wood tones
+- Architecture: match reference geometry and MATERIAL COLOR KEY colors; timber reads as natural vertical grain, glazing as soft sky-reflective glass
+- Camera: editorial architectural photo, 35–50mm, calm serene mood, subtle film grain — avoid glossy CGI visualization tropes`;
+
+const PHOTO_TREE_AND_CONTEXT = `TREES (photorealistic — critical):
+- Tree markers in the reference viewport are PLACEMENT GUIDES only. Render each as a REAL slender deciduous tree: thin trunk, fine branching, airy SPARSE pale-green leaf canopy (birch / early-spring feel). Branches partly visible through thin foliage.
+- NEVER output leafless grey sticks, wire armatures, or abstract branch sculptures — those are 3D editor proxies, not the final look.
+- Keep exact count and positions of every tree marker from the reference; scale canopies naturally for the scene.
+
+BACKGROUND / SITE CONTEXT:
+- If the reference shows blank grey sky, flat void, or empty sides — FILL with atmospheric depth like Nordic architectural photo references:
+  - Rows of slender leafy trees receding behind and beside the building
+  - Soft glimpses of contemporary timber-and-glass buildings partially hidden by trees (campus / residential scale)
+  - Pale overcast sky with natural horizon — NOT an empty grey void
+- Main building stays the hero; background trees and buildings are softer, slightly defocused for depth`;
+
 const DEFAULT_PROMPTS = {
-  photorealistic: `Architectural photography, natural overcast daylight. Contemporary multi-storey building. Facade panels match the colors shown in the 3D model — colored solid panels are cladding/spandrel panels, light blue transparent panels are floor-to-ceiling glazing/glass. Exposed structural frame. Ground level with gravel, sparse trees, human figures for scale. Shot on medium format film, 40mm lens, slight grain.`,
-  model: `Physical architectural scale model photograph, 1:200 scale. White cardboard massing, facade elements match the 3D model colors — use colored card for solid panels, clear acetate/perspex for glazing/glass panels. Bare wire tree armatures, white ground plane, soft studio lighting from above-left, grey seamless background, macro lens, ultra-sharp focus, no people.`
+  photorealistic: `Match the MATERIAL COLOR KEY exactly. Preserve all tree marker positions, furniture sets, and grass patch footprints from the reference. Translate tree markers into realistic thin-leaf deciduous trees. Fill empty background with trees and distant buildings. Timber/brown tones are natural wood. Light blue/cyan tones are soft overcast glazing.`,
+  model: `Physical architectural scale model photograph, 1:200 scale. White cardboard base and ground plane only — preserve ALL colors from the MATERIAL COLOR KEY on the building: timber/brown structure as stained wood or tan card (NOT white), glazing as clear acetate/perspex, colored panels as matching card stock. Preserve every naked tree exactly as in the reference: gray/tan (${TREE_NAKED_RENDER_HEX}) angular branch models — NOT generic wire armatures. Include ALL furniture sets (round tables with stools) inside the building and on exterior plazas — same count and layout as the reference. Soft studio lighting from above-left, grey seamless background, macro lens, ultra-sharp focus, no people.`
 };
+
+const FIDELITY_RULES = `FIDELITY RULES:
+- Copy the reference image composition exactly: same camera, building massing, floor count, roof shape
+- Every tree, furniture piece, and grass patch visible in the reference MUST appear — do not simplify, omit, or substitute
+- Match colors from MATERIAL COLOR KEY — do not repaint timber white or replace colored panels
+- Grass patches: render as irregular wild meadow within the exact polygon boundaries from the reference
+- Trees (model mode): match angular branch proxy geometry from reference, NOT wire armatures
+- Trees (photorealistic): see PHOTO_TREE_AND_CONTEXT — realistic thin-leaf deciduous at marker positions
+- Furniture: preserve round tables with surrounding stools; same wood color as reference`;
+
+const GENERIC_RENDER_MATERIAL_KEY = `- Colored opaque panels (gold/yellow, terracotta, grey etc) = solid facade cladding/spandrel panels in that color
+- Light blue / cyan semi-transparent panels = FLOOR-TO-CEILING GLASS / GLAZING — render these as reflective glass with sky and interior visible through them
+- White/grey structural elements = concrete or steel frame
+- The building MUST have visible glazing where the light blue panels appear in the reference`;
+
+function normalizeLegendHex(hex) {
+  if (!hex || typeof hex !== 'string') return null;
+  let h = hex.trim().toLowerCase();
+  if (h === 'none') return null;
+  if (!h.startsWith('#')) h = '#' + h;
+  if (/^#[0-9a-f]{3}$/.test(h)) h = '#' + h[1] + h[1] + h[2] + h[2] + h[3] + h[3];
+  return /^#[0-9a-f]{6}$/.test(h) ? h : null;
+}
+
+function legendRgb(hex) {
+  const h = normalizeLegendHex(hex);
+  if (!h) return null;
+  return [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+}
+
+function legendClassifyHex(hex, ctx) {
+  const norm = normalizeLegendHex(hex);
+  if (!norm) return null;
+  const glassHex = (typeof MOD_GLASS_HEX !== 'undefined' ? MOD_GLASS_HEX : '#a8d8f0').toLowerCase();
+  const plywoodHex = (typeof MOD_PLYWOOD_HEX !== 'undefined' ? MOD_PLYWOOD_HEX : '#d4b896').toLowerCase();
+  const skylightHex = (SKYLIGHT_GLASS_COLOR || '#9ec9e8').toLowerCase();
+  const treeHex = (typeof TREE_NAKED_RENDER_HEX !== 'undefined' ? TREE_NAKED_RENDER_HEX : '#a89e8a').toLowerCase();
+
+  if (norm === treeHex || ctx?.kind === 'treeNaked') {
+    return { label: 'tree marker (photo: slender deciduous, thin pale-green leaves)', priority: 2 };
+  }
+  if (norm === glassHex) return { label: 'glazing (transparent glass)', priority: 1 };
+  if (norm === plywoodHex) return { label: 'plywood / solid timber infill', priority: 2 };
+  if (norm === skylightHex) return { label: 'skylight glazing', priority: 1 };
+
+  if (ctx?.source === 'gridBase') return { label: 'exposed timber structure (columns and beams)', priority: 1 };
+  if (ctx?.source === 'gridRoof') return { label: 'roof cladding', priority: 4 };
+  if (ctx?.source === 'gridGable') return { label: 'gable end cladding', priority: 4 };
+  if (ctx?.isGlass) return { label: 'glazing (transparent glass)', priority: 1 };
+  if (ctx?.source === 'modFrame') {
+    const named = (typeof MOD_COLORS !== 'undefined' ? MOD_COLORS : []).find(c => c.hex.toLowerCase() === norm);
+    return { label: named ? `facade panel (${named.name.toLowerCase()})` : 'facade cladding/spandrel panel', priority: 2 };
+  }
+
+  const rgb = legendRgb(norm);
+  if (!rgb) return { label: 'surface material', priority: 5 };
+  const [r, g, b] = rgb;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  const sat = max === 0 ? 0 : (max - min) / max;
+
+  if (g > 150 && b > 170 && r < 190 && lum > 0.5) return { label: 'glazing (transparent glass)', priority: 1 };
+  if (r > g && g >= b * 0.75 && lum >= 0.4 && lum <= 0.88 && sat >= 0.04) {
+    return { label: ctx?.type === 'stair' ? 'stair structure (timber)' : 'timber / warm structure', priority: 2 };
+  }
+  if (sat < 0.12) {
+    if (lum > 0.88) return { label: 'white/light structure', priority: 4 };
+    if (lum > 0.62) return { label: 'concrete / neutral structure', priority: 3 };
+    return { label: 'dark structure / steel frame', priority: 4 };
+  }
+  if (b > r + 15 && b > g) return { label: 'facade spandrel / shading panel', priority: 2 };
+  if (r > 170 && g > 120 && b < 130) return { label: 'facade cladding panel (gold/warm)', priority: 2 };
+  if (r > g * 1.15 && r > b * 1.15) return { label: 'facade cladding (terracotta/warm)', priority: 2 };
+  if (g > r && g > b) return { label: 'facade / landscape accent', priority: 3 };
+  if (ctx?.type === 'mass' || ctx?.type === 'wall') return { label: 'building mass / envelope', priority: 3 };
+  if (ctx?.type === 'furniture' || ctx?.type === 'furnitureGroup') {
+    const k = ctx?.kind;
+    if (k === 'stool' || k === 'tableRnd') return { label: 'furniture wood (Aalto tables/stools)', priority: 2 };
+    return { label: 'furniture / landscape element', priority: 2 };
+  }
+  if (ctx?.type === 'landscape' || ctx?.source === 'landscape') return { label: 'wild grass meadow patch on gravel', priority: 2 };
+  return { label: 'facade / surface material', priority: 5 };
+}
+
+function buildRenderMaterialLegend() {
+  const entries = new Map();
+  const glassHex = (typeof MOD_GLASS_HEX !== 'undefined' ? MOD_GLASS_HEX : '#a8d8f0').toLowerCase();
+
+  function add(hex, ctx) {
+    const norm = normalizeLegendHex(hex);
+    if (!norm) return;
+    const classified = legendClassifyHex(norm, ctx);
+    if (!classified) return;
+    const existing = entries.get(norm);
+    if (!existing || classified.priority < existing.priority) {
+      entries.set(norm, classified);
+    }
+  }
+
+  const pinnedHex = new Set();
+  add(TREE_NAKED_RENDER_HEX, { type: 'furniture', kind: 'treeNaked' });
+  pinnedHex.add(normalizeLegendHex(TREE_NAKED_RENDER_HEX));
+
+  (state.plans || []).forEach(plan => {
+    (plan.objects || []).forEach(obj => {
+      const t = obj.type;
+      if (t === 'grid' || t === 'fgrid') {
+        add(obj.color, { source: 'gridBase', type: t });
+        add(gridRoofColor(obj), { source: 'gridRoof', type: t });
+        add(gridGableColor(obj), { source: 'gridGable', type: t });
+      } else if (t === 'furniture' || t === 'furnitureGroup') {
+        if (obj.color) {
+          add(obj.color, { type: t, kind: obj.kind });
+          const norm = normalizeLegendHex(obj.color);
+          if (norm) pinnedHex.add(norm);
+        }
+      } else if (t === 'landscape') {
+        add(obj.color || GRASS_DEFAULT_COLOR, { type: 'landscape', source: 'landscape' });
+      } else if (obj.color) {
+        add(obj.color, { type: t });
+      }
+    });
+  });
+
+  (state.modules || []).forEach(mod => {
+    (mod.shapes || []).forEach(sh => {
+      add(sh.color, { source: 'modFrame' });
+      const inner = sh.innerColor;
+      if (inner && (inner + '').toLowerCase() !== 'none') {
+        const isGlass = (inner + '').toLowerCase() === glassHex ||
+          (typeof isModGlassColor === 'function' && isModGlassColor(inner));
+        add(inner, { source: 'modInner', isGlass });
+      }
+    });
+  });
+
+  add(SKYLIGHT_GLASS_COLOR, { isGlass: true });
+  add(glassHex, { isGlass: true });
+
+  const all = [...entries.entries()]
+    .sort((a, b) => a[1].priority - b[1].priority || a[0].localeCompare(b[0]));
+  const pinnedEntries = all.filter(([hex]) => pinnedHex.has(hex));
+  const rest = all.filter(([hex]) => !pinnedHex.has(hex))
+    .slice(0, Math.max(0, 25 - pinnedEntries.length));
+  const sorted = [...pinnedEntries, ...rest];
+
+  if (!sorted.length) return '';
+  const lines = sorted.map(([hex, { label }]) => `${hex} — ${label}`);
+  return `MATERIAL COLOR KEY (match these exactly in the render):\n${lines.join('\n')}`;
+}
+
+function buildRenderSceneInventory(mode) {
+  const counts = {};
+  function bump(kind) {
+    if (!kind) return;
+    counts[kind] = (counts[kind] || 0) + 1;
+  }
+  (state.plans || []).forEach(plan => {
+    (plan.objects || []).forEach(obj => {
+      if (obj.type === 'furniture' && obj.kind) bump(obj.kind);
+      else if (obj.type === 'furnitureGroup') {
+        if (obj.pieces && obj.pieces.length) obj.pieces.forEach(p => bump(p.kind));
+        else if (obj.kind) bump(obj.kind);
+      }
+    });
+  });
+  const kinds = Object.keys(counts);
+  const grassPatches = (state.plans[0]?.objects || []).filter(o =>
+    o.type === 'landscape' && o.kind === 'grass' && o.closed && o.pts?.length >= 3).length;
+  const isPhoto = mode === 'photorealistic';
+  if (!kinds.length && !grassPatches && !isPhoto) return '';
+
+  const lines = ['SCENE INVENTORY (preserve ALL — same count, placement, and style as reference image):'];
+
+  if (grassPatches) {
+    lines.push(`- ${grassPatches} grass patch${grassPatches === 1 ? '' : 'es'}: irregular wild meadow on light grey gravel (sage/olive greens, varied texture, natural edges) — match exact polygon footprints from reference`);
+  }
+
+  const remaining = { ...counts };
+
+  const treeNaked = remaining.treeNaked || 0;
+  if (treeNaked) {
+    if (isPhoto) {
+      lines.push(`- ${treeNaked} tree marker${treeNaked === 1 ? '' : 's'}: at each exact position render a REAL slender deciduous tree with thin airy pale-green leaves — NOT grey stick proxies from the viewport`);
+    } else {
+      lines.push(`- ${treeNaked} naked tree${treeNaked === 1 ? '' : 's'}: bare angular branch sculptures in gray-tan (${TREE_NAKED_RENDER_HEX}), NOT wire armatures, NOT omitted`);
+    }
+    delete remaining.treeNaked;
+  }
+
+  const stools = remaining.stool || 0;
+  const tableRnd = remaining.tableRnd || 0;
+  let hasCafeSets = stools > 0 || tableRnd > 0;
+  if (stools || tableRnd) {
+    const parts = [];
+    if (tableRnd) parts.push(`${tableRnd} round table${tableRnd === 1 ? '' : 's'} (Aalto-style disc tops)`);
+    if (stools) parts.push(`${stools} stool${stools === 1 ? '' : 's'} (3-leg round seats)`);
+    lines.push(`- ${parts.join(' + ')} in light wood tones`);
+    delete remaining.stool;
+    delete remaining.tableRnd;
+  }
+
+  const table4 = remaining.table4 || 0;
+  if (table4) {
+    lines.push(`- ${table4} square/rect table${table4 === 1 ? '' : 's'} — do not omit`);
+    delete remaining.table4;
+  }
+
+  ['treeRnd', 'treeL', 'plantS', 'pot'].forEach(kind => {
+    const n = remaining[kind];
+    if (!n) return;
+    const label = (typeof KIND_LABELS !== 'undefined' && KIND_LABELS[kind]) || kind;
+    lines.push(`- ${n} ${label}${n === 1 ? '' : 's'} — do not omit`);
+    delete remaining[kind];
+  });
+
+  Object.keys(remaining).sort().forEach(kind => {
+    const n = remaining[kind];
+    const label = (typeof KIND_LABELS !== 'undefined' && KIND_LABELS[kind]) || kind;
+    lines.push(`- ${n} ${label}${n === 1 ? '' : 's'} — do not omit`);
+    if (/^grpRound|^table|^stool|^desk|^chair/.test(kind)) hasCafeSets = true;
+  });
+
+  if (hasCafeSets) {
+    lines.push('- Tables/stools visible inside ground-floor glazing AND on exterior plaza — do not remove any set');
+  }
+  if (isPhoto) {
+    if (!treeNaked) {
+      lines.push('- Add slender thin-leaf deciduous trees in background if the reference frame lacks sufficient planting');
+    }
+    lines.push('- Fill blank sky/edges with distant trees and soft modern timber-glass buildings (Nordic campus context)');
+  }
+  lines.push('- DO NOT OMIT any listed element — match reference count and placement exactly');
+  return lines.join('\n');
+}
+
+function getRenderMaterialKey(s) {
+  const useLegend = s?.includeMaterialLegend !== false;
+  if (useLegend) {
+    const legend = buildRenderMaterialLegend();
+    if (legend) return legend + '\n\n';
+  }
+  return `Material key (read from the colors in the 3D image):\n${GENERIC_RENDER_MATERIAL_KEY}\n\n`;
+}
+
+function getRenderContextBlock(s, mode) {
+  const useLegend = s?.includeMaterialLegend !== false;
+  if (useLegend) {
+    let block = '';
+    const legend = buildRenderMaterialLegend();
+    if (legend) block += legend + '\n\n';
+    const inventory = buildRenderSceneInventory(mode);
+    if (inventory) block += inventory + '\n\n';
+    block += FIDELITY_RULES + '\n\n';
+    if (mode === 'photorealistic') {
+      block += PHOTO_TREE_AND_CONTEXT + '\n\n';
+      block += PHOTO_RENDER_STYLE + '\n\n';
+    }
+    return block;
+  }
+  return getRenderMaterialKey(s);
+}
+// Gemini image models — tried in order until one succeeds (Google AI Studio).
+const DEFAULT_RENDER_MODELS = [
+  'gemini-3.1-flash-image-preview',
+  'gemini-3.1-flash-image',
+  'gemini-2.5-flash-image',
+  'gemini-3-pro-image-preview',
+];
 
 function getAdminSettings() {
   try { return JSON.parse(localStorage.getItem('bimster_v2_admin') || localStorage.getItem('bimster_admin') || '{}'); } catch { return {}; }
@@ -10689,6 +11858,7 @@ function saveAdminSettings() {
     apiKey: document.getElementById('admin-api-key').value.trim(),
     promptPhoto: document.getElementById('admin-prompt-photo').value.trim() || DEFAULT_PROMPTS.photorealistic,
     promptModel: document.getElementById('admin-prompt-model').value.trim() || DEFAULT_PROMPTS.model,
+    includeMaterialLegend: document.getElementById('admin-material-legend').checked,
   };
   localStorage.setItem('bimster_v2_admin', JSON.stringify(s));
   closeAdminPanel();
@@ -10701,6 +11871,7 @@ function openAdminPanel() {
   document.getElementById('admin-api-key').value = s.apiKey || '';
   document.getElementById('admin-prompt-photo').value = s.promptPhoto || DEFAULT_PROMPTS.photorealistic;
   document.getElementById('admin-prompt-model').value = s.promptModel || DEFAULT_PROMPTS.model;
+  document.getElementById('admin-material-legend').checked = s.includeMaterialLegend !== false;
   document.getElementById('admin-panel').style.display = 'flex';
 }
 function closeAdminPanel() { document.getElementById('admin-panel').style.display = 'none'; }
@@ -10840,15 +12011,15 @@ async function startRender(mode) {
   await new Promise(r => setTimeout(r, 80));
   const srcCanvas = document.getElementById('three-canvas');
 
-  // Create downscaled snapshot — keep small to avoid timeouts
-  const maxW = 768;
+  // Downscaled snapshot for API — higher res preserves small furniture/trees
+  const maxW = 1024;
   const scale = Math.min(1, maxW / srcCanvas.width);
   const off = document.createElement('canvas');
   off.width  = Math.round(srcCanvas.width  * scale);
   off.height = Math.round(srcCanvas.height * scale);
   off.getContext('2d').drawImage(srcCanvas, 0, 0, off.width, off.height);
   const thumb = off.toDataURL('image/jpeg', 0.5);
-  const viewportB64 = off.toDataURL('image/jpeg', 0.85).split(',')[1];
+  const viewportB64 = off.toDataURL('image/jpeg', 0.92).split(',')[1];
 
   const job = {
     id: ++renderIdCounter,
@@ -10878,17 +12049,14 @@ async function runRenderJob(job, viewportB64, s) {
   };
 
   // Model priority list — newest image-gen models first
-  const models = [
-    'gemini-3.1-flash-image-preview',
-    'gemini-2.0-flash-exp',
-    'gemini-2.0-flash-preview-image-generation',
-  ];
+  const models = DEFAULT_RENDER_MODELS;
 
   let res = null, usedModel = null;
+  const failReasons = [];
 
   for (const model of models) {
     usedModel = model;
-    updateProgress(15, `Sending to ${model.split('/').pop()}…`);
+    updateProgress(15, `Sending to ${model}…`);
     const controller = new AbortController();
     const tid = setTimeout(() => controller.abort(), 120000); // 2 min per model
     try {
@@ -10901,22 +12069,27 @@ async function runRenderJob(job, viewportB64, s) {
           body: JSON.stringify({
             contents: [{ role: 'user', parts: [
               { inline_data: { mime_type: 'image/jpeg', data: viewportB64 } },
-              { text: `This is a 3D architectural massing model. Use it as the EXACT composition reference — same camera angle, building footprint, floor count, and proportions.\n\nMaterial key (read from the colors in the 3D image):\n- Colored opaque panels (gold/yellow, terracotta, grey etc) = solid facade cladding/spandrel panels in that color\n- Light blue / cyan semi-transparent panels = FLOOR-TO-CEILING GLASS / GLAZING — render these as reflective glass with sky and interior visible through them\n- White/grey structural elements = concrete or steel frame\n- The building MUST have visible glazing where the light blue panels appear in the reference\n\n${prompt}` }
+              { text: `This is a 3D architectural model screenshot. Reproduce it faithfully — same geometry, element count, colors, and camera. Do not omit trees, furniture, or grass patches.\n\n${getRenderContextBlock(s, job.mode)}${prompt}` }
             ]}],
             generationConfig: { responseModalities: ['TEXT', 'IMAGE'] },
           }),
         }
       );
       clearTimeout(tid);
-      if (res.status === 404 || res.status === 400) {
-        // Model not available — try next
+      if (res.status === 404 || res.status === 400 || res.status === 429) {
+        const errText = await res.text();
+        let msg = `${res.status}`;
+        try { msg = JSON.parse(errText).error?.message || msg; } catch {}
+        failReasons.push(`${model}: ${msg}`);
         updateProgress(15, `${model} unavailable, trying next…`);
+        res = null;
         continue;
       }
       break; // got a real response
     } catch(err) {
       clearTimeout(tid);
       if (err.name === 'AbortError') {
+        failReasons.push(`${model}: timed out`);
         updateProgress(15, `${model} timed out, trying next…`);
         res = null; continue;
       }
@@ -10925,7 +12098,13 @@ async function runRenderJob(job, viewportB64, s) {
   }
 
   try {
-    if (!res) throw new Error('All models timed out. Try again or check your API key.');
+    if (!res) {
+      throw new Error(
+        failReasons.length
+          ? `No image model available. ${failReasons.join(' · ')}`
+          : 'All models timed out. Try again or check your API key.'
+      );
+    }
 
     updateProgress(70, 'Processing response…');
     if (!res.ok) {
@@ -12112,40 +13291,23 @@ draw2D = function() {
     const w = Math.abs(b.sx - a.sx), h = Math.abs(b.sy - a.sy);
     if (w > 2 || h > 2) {
       const item = state.pendingFurniture;
-      const spacingByKind = {
-        grpWorkstation: { gx: 0.5, gy: 0.8 },
-        grpRound4:      { gx: 0.8, gy: 0.8 },
-        grpRound6:      { gx: 0.8, gy: 0.8 },
-        grpLounge:      { gx: 1.0, gy: 1.0 },
-        grpCanteen:     { gx: 1.0, gy: 1.0 },
-        desk:           { gx: 0.3, gy: 0.8 },
-        chair:          { gx: 0.2, gy: 0.2 },
-        treeNaked:      { gx: 3.0, gy: 3.0 },
-      };
-      const g = spacingByKind[item.kind] || { gx: 0.6, gy: 0.6 };
-      const itemWpx = mToWorld(item.w) * state.zoom;
-      const itemHpx = mToWorld(item.h) * state.zoom;
-      const stepXpx = itemWpx + mToWorld(g.gx) * state.zoom;
-      const stepYpx = itemHpx + mToWorld(g.gy) * state.zoom;
-      const nx = Math.max(1, Math.floor(w / stepXpx));
-      const ny = Math.max(1, Math.floor(h / stepYpx));
+      const spacing = furnitureArraySpacing(item);
+      const arr = computeFurnitureArray(w, h, spacing, m => mToWorld(m) * state.zoom);
       ctx2.save();
       ctx2.setTransform(DPR, 0, 0, DPR, 0, 0);
       ctx2.fillStyle = 'rgba(42,109,212,0.45)';
-      const totalW = nx * stepXpx - mToWorld(g.gx) * state.zoom;
-      const totalH = ny * stepYpx - mToWorld(g.gy) * state.zoom;
-      const offX = x + (w - totalW) / 2 + itemWpx / 2;
-      const offY = y + (h - totalH) / 2 + itemHpx / 2;
-      for (let j = 0; j < ny; j++) {
-        for (let i = 0; i < nx; i++) {
-          const dx = offX + i * stepXpx;
-          const dy = offY + j * stepYpx;
-          ctx2.fillRect(dx - itemWpx/2, dy - itemHpx/2, itemWpx, itemHpx);
+      const offX = x + (w - arr.totalW) / 2 + arr.itemW / 2;
+      const offY = y + (h - arr.totalH) / 2 + arr.itemH / 2;
+      for (let j = 0; j < arr.ny; j++) {
+        for (let i = 0; i < arr.nx; i++) {
+          const dx = offX + i * arr.stepX;
+          const dy = offY + j * arr.stepY;
+          ctx2.fillRect(dx - arr.itemW/2, dy - arr.itemH/2, arr.itemW, arr.itemH);
         }
       }
       ctx2.fillStyle = '#2a6dd4';
       ctx2.font = '10px DM Mono, monospace';
-      ctx2.fillText(`${nx} × ${ny} = ${nx*ny} ${item.label}`, x + 4, Math.max(y - 4, 12));
+      ctx2.fillText(`${arr.nx} × ${arr.ny} = ${arr.nx*arr.ny} ${item.label}`, x + 4, Math.max(y - 4, 12));
       ctx2.restore();
     }
   }
@@ -12410,6 +13572,8 @@ hitTestAll = function(sx, sy) {
     const obj=objs[i];
     if(obj.type==='separator'){
       if(hitSeparatorPolyline(obj,sx,sy,yOff,HIT)) hits.push(obj);
+    } else if(obj.type==='landscape'){
+      if(pointInLandscapePoly(obj,sx,sy,yOff,true)) hits.push(obj);
     } else if(obj.type==='line'){
       const a=wts(obj.x1,obj.y1,yOff),b=wts(obj.x2,obj.y2,yOff);
       const dx=b.x-a.x,dy=b.y-a.y,len2=dx*dx+dy*dy;
@@ -12632,6 +13796,8 @@ function ctxSetObjColor(hex) {
   if (dot) dot.style.background = hex;
   draw2D(); rebuild3D();
 }
+let snapConfigBackup = null;
+
 function toggleSnap(mode){
   state.snapModes[mode]=!state.snapModes[mode];
   syncSnapModeChecks();
@@ -12642,6 +13808,35 @@ function syncSnapModeChecks() {
     const sc = document.getElementById('sc-' + mode);
     if (sc) sc.textContent = state.snapModes[mode] ? '✓' : '';
   });
+  syncSnapAllRows();
+}
+
+function syncSnapAllRows() {
+  const offRow = document.getElementById('snap-all-off-row');
+  const restoreRow = document.getElementById('snap-restore-row');
+  if (restoreRow) restoreRow.style.display = snapConfigBackup ? 'flex' : 'none';
+  if (offRow) offRow.style.display = snapConfigBackup ? 'none' : 'flex';
+}
+
+function disableAllSnaps() {
+  if (snapConfigBackup) return;
+  snapConfigBackup = {
+    snapModes: { ...state.snapModes },
+    planSnapM: state.planSnapM,
+  };
+  state.snapModes = { grid: false, lines: false, points: false, perpendicular: false };
+  state.planSnapM = 0;
+  syncSnapModeChecks();
+  syncPlanSnapChecks();
+}
+
+function restoreAllSnaps() {
+  if (!snapConfigBackup) return;
+  state.snapModes = { ...snapConfigBackup.snapModes };
+  state.planSnapM = snapConfigBackup.planSnapM;
+  snapConfigBackup = null;
+  syncSnapModeChecks();
+  syncPlanSnapChecks();
 }
 
 function togglePlanSnapSubmenu(e) {
@@ -12683,6 +13878,7 @@ showCtxMenu=function(sx,sy,cx,cy){
   closeCtxSubmenus();
   syncPlanSnapChecks();
   syncSnapModeChecks();
+  syncSnapAllRows();
 
   const onPlan = hitPlanSheet(sx, sy) >= 0;
   const hasObj = !!objects().find(o => o.id === state.selected);
@@ -13152,6 +14348,10 @@ function setRoofType(type) {
   if (!obj || !obj.hasRoof) return;
   historySnapshot();
   obj.roofType = type;
+  if (type === 'pitched') {
+    obj._pitchedRoofOffsetZeroAt = PITCHED_ROOF_OFFSET_BASE;
+    if (obj.roofOffset == null) obj.roofOffset = 0;
+  }
   syncRoofUiSummary(obj);
   draw2D(); rebuild3D();
 }
@@ -13224,6 +14424,22 @@ function toggleRoofJoists(checked) {
   if (!obj || !obj.hasRoof) return;
   historySnapshot();
   obj.roofJoists = checked;
+  if (checked) {
+    if (obj.roofJoistsDirX == null) obj.roofJoistsDirX = true;
+    if (obj.roofJoistsDirY == null) obj.roofJoistsDirY = true;
+  }
+  syncRoofUiSummary(obj);
+  draw2D(); rebuild3D();
+}
+
+function toggleRoofJoistsDir(axis, checked) {
+  const obj = selectedGridObj();
+  if (!obj || !obj.hasRoof) return;
+  historySnapshot();
+  if (axis === 'x') obj.roofJoistsDirX = checked;
+  else obj.roofJoistsDirY = checked;
+  obj.roofJoists = !!(obj.roofJoistsDirX !== false || obj.roofJoistsDirY !== false);
+  syncRoofUiSummary(obj);
   draw2D(); rebuild3D();
 }
 
@@ -15632,6 +16848,7 @@ function finishModMarquee() {
 
   window.addEventListener('keydown', function(e) {
     if (e.code === 'Escape') {
+      if (grassDraw) { cancelGrassDraw(); return; }
       if (sepDraw) { cancelSepDraw(); return; }
       if (modPencilStart) {
         // Remove incomplete polyline
@@ -15643,6 +16860,7 @@ function finishModMarquee() {
       }
     }
     if (e.code === 'Enter' || e.code === 'NumpadEnter') {
+      if (grassDraw) { finishGrassDraw(); return; }
       if (sepDraw) { finishSepDraw(); return; }
       if (modPencilStart) {
         // Finish open polyline — keep it as-is, stop drawing
@@ -15681,6 +16899,7 @@ setTool=function(t){
     lastModSnap=null;
   }
   if(sepDraw) cancelSepDraw();
+  if(grassDraw) cancelGrassDraw();
   hideMeasure();
   _origSetTool(t);
 };
@@ -15731,6 +16950,63 @@ window.addEventListener('mousemove', function(e) {
   const obj = objects().find(o => o.id === sepDraw.objId);
   const last = obj?.pts?.[obj.pts.length - 1];
   if (last) lastSnapResult = computeSeparatorSnap(sx, sy, last, baseY);
+  draw2D();
+}, true);
+
+// ── Grass patch polyline tool (plan canvas, ground plan only) ──
+const _planCanvasForGrass = document.getElementById('plan-canvas');
+_planCanvasForGrass && _planCanvasForGrass.addEventListener('mousedown', function(e) {
+  if (e.button !== 0 || state.tool !== 'grass' || spaceDown) return;
+  if (state.currentPlan !== 0) return;
+  const r = _planCanvasForGrass.getBoundingClientRect();
+  const sx = e.clientX - r.left, sy = e.clientY - r.top;
+  if (typeof hitModSheet2 === 'function' && hitModSheet2(sx, sy)) return;
+  e.stopPropagation();
+  const baseY = planOriginY(state.currentPlan);
+  const obj0 = grassDraw ? objects().find(o => o.id === grassDraw.objId) : null;
+  const lastPt = obj0?.pts?.[obj0.pts.length - 1];
+  const snap = computeGrassSnap(sx, sy, lastPt || null, baseY);
+  const wx = snap.wx, wy = snap.wy;
+
+  if (grassDraw && obj0?.pts?.length >= 3) {
+    const first = obj0.pts[0];
+    const fs = wts(first.x, first.y, baseY);
+    if (Math.hypot(snap.sx - fs.x, snap.sy - fs.y) <= 14) {
+      finishGrassDraw();
+      return;
+    }
+  }
+
+  if (!grassDraw) {
+    historySnapshot();
+    const obj = {
+      id: nextId(), type: 'landscape', kind: 'grass',
+      color: GRASS_DEFAULT_COLOR,
+      pts: [{ x: wx, y: wy }],
+      closed: false,
+    };
+    objects().push(obj);
+    grassDraw = { objId: obj.id };
+  } else {
+    const obj = objects().find(o => o.id === grassDraw.objId);
+    if (!obj) { grassDraw = null; return; }
+    const last = obj.pts[obj.pts.length - 1];
+    if (Math.hypot(wx - last.x, wy - last.y) > PX_PER_M * 0.05) {
+      historySnapshot();
+      obj.pts.push({ x: wx, y: wy });
+    }
+  }
+  draw2D();
+}, true);
+
+window.addEventListener('mousemove', function(e) {
+  if (state.tool !== 'grass' || !grassDraw) return;
+  const r = _planCanvasForGrass.getBoundingClientRect();
+  const sx = e.clientX - r.left, sy = e.clientY - r.top;
+  const baseY = planOriginY(state.currentPlan);
+  const obj = objects().find(o => o.id === grassDraw.objId);
+  const last = obj?.pts?.[obj.pts.length - 1];
+  if (last) lastSnapResult = computeGrassSnap(sx, sy, last, baseY);
   draw2D();
 }, true);
 
@@ -15864,6 +17140,43 @@ draw2D=function(){
       ctx2.restore();
     }
   }
+  // Grass patch rubber-band + fill preview
+  if (state.tool === 'grass' && grassDraw && lastSnapResult) {
+    const obj = objects().find(o => o.id === grassDraw.objId);
+    const pts = obj?.pts;
+    const last = pts?.[pts.length - 1];
+    if (last) {
+      const baseY = planOriginY(state.currentPlan);
+      const ex = lastSnapResult.sx, ey = lastSnapResult.sy;
+      ctx2.save();
+      ctx2.beginPath();
+      const p0 = wts(pts[0].x, pts[0].y, baseY);
+      ctx2.moveTo(p0.x, p0.y);
+      for (let i = 1; i < pts.length; i++) {
+        const p = wts(pts[i].x, pts[i].y, baseY);
+        ctx2.lineTo(p.x, p.y);
+      }
+      ctx2.lineTo(ex, ey);
+      if (pts.length >= 2) {
+        ctx2.fillStyle = GRASS_DEFAULT_COLOR;
+        ctx2.globalAlpha = 0.22;
+        ctx2.fill();
+        ctx2.globalAlpha = 1;
+      }
+      ctx2.strokeStyle = GRASS_DEFAULT_COLOR;
+      ctx2.lineWidth = 1.2;
+      ctx2.stroke();
+      if (pts.length >= 2) {
+        const ls0 = wts(pts[0].x, pts[0].y, baseY);
+        ctx2.setLineDash([4, 3]);
+        ctx2.strokeStyle = 'rgba(42,109,212,0.55)';
+        ctx2.beginPath(); ctx2.moveTo(ex, ey); ctx2.lineTo(ls0.x, ls0.y); ctx2.stroke();
+        ctx2.setLineDash([]);
+      }
+      if (lastSnapResult) drawSnapIndicator({ ...lastSnapResult, sx: ex, sy: ey });
+      ctx2.restore();
+    }
+  }
 };
 
 // (eraser handled directly in planCanvas mousedown)
@@ -15896,6 +17209,7 @@ draw2D = function() {
   const busy = state.drawing || state.dragging || state.multiDragging || state.panning ||
                 state.sepPtDrag ||
                 sepDraw ||
+                grassDraw ||
                 marqueeActive || modMarqueeActive || multiDragPending ||
                 modDraw2.active || modHandleDrag != null || modShapeDrag != null || modMultiDrag != null ||
                 modMultiDragPending != null ||
@@ -15936,7 +17250,11 @@ requestAnimationFrame(() => {
       style="width:100%;padding:8px;border:1px solid var(--border2);border-radius:6px;font-size:11px;font-family:var(--mono);background:var(--bg);color:var(--text);resize:vertical;box-sizing:border-box;margin-bottom:12px"></textarea>
     <label style="display:block;font-size:11px;color:var(--text3);margin-bottom:4px">Model render prompt</label>
     <textarea id="admin-prompt-model" rows="3"
-      style="width:100%;padding:8px;border:1px solid var(--border2);border-radius:6px;font-size:11px;font-family:var(--mono);background:var(--bg);color:var(--text);resize:vertical;box-sizing:border-box;margin-bottom:16px"></textarea>
+      style="width:100%;padding:8px;border:1px solid var(--border2);border-radius:6px;font-size:11px;font-family:var(--mono);background:var(--bg);color:var(--text);resize:vertical;box-sizing:border-box;margin-bottom:12px"></textarea>
+    <label style="display:flex;align-items:center;gap:8px;font-size:11px;color:var(--text2);margin-bottom:16px;cursor:pointer">
+      <input id="admin-material-legend" type="checkbox" checked style="accent-color:#2a6dd4">
+      Include auto material legend from scene colors
+    </label>
     <div style="display:flex;gap:8px;justify-content:flex-end">
       <button onclick="closeAdminPanel()" style="padding:7px 14px;border:1px solid var(--border2);border-radius:6px;cursor:pointer;background:var(--bg2);font-size:12px">Cancel</button>
       <button onclick="saveAdminSettings()" style="padding:7px 14px;background:#2a6dd4;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:12px;font-weight:500">Save</button>
